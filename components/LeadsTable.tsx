@@ -127,7 +127,7 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
 
         const { error } = await supabase
           .from("leads")
-          .insert(leads);
+          .insert(leads as never);
 
         if (error) throw error;
         onRefresh();
