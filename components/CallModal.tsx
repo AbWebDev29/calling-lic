@@ -6,7 +6,7 @@ interface Lead {
   id: number;
   name: string;
   phone: string;
-  company: string;
+  company?: string;
 }
 
 interface CallModalProps {

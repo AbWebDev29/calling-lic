@@ -112,17 +112,17 @@ export default function Dashboard() {
         .insert({
           lead_id: lead.id,
           lead_name: lead.name,
-          company: lead.company,
+          company: lead.company || "",
           phone: lead.phone,
           disposition: "Pending",
           notes: "",
           user_id: userData.user.id,
-        })
+        } as never)
         .select()
         .single();
 
       if (data) {
-        setCurrentLogId(data.id);
+        setCurrentLogId((data as any).id);
       }
     }
 
@@ -137,7 +137,7 @@ export default function Dashboard() {
       // Update the call log
       const { error } = await supabase
         .from("call_logs")
-        .update({ disposition, notes })
+        .update({ disposition, notes } as never)
         .eq("id", currentLogId);
 
       if (error) throw error;
@@ -147,7 +147,7 @@ export default function Dashboard() {
         .from("leads")
         .update({
           status: disposition === "Do Not Call" ? "Not Interested" : disposition,
-        })
+        } as never)
         .eq("id", selectedLead.id);
 
       // Refresh data
