@@ -1,0 +1,11 @@
+/* Component-specific styles for dynamic colors */
+
+[data-avatar-color] {
+  background-color: var(--avatar-bg);
+}
+
+[data-accent-color] {
+  border-left-color: var(--accent-color);
+}
+
+/* These CSS variables will be set inline as the only exception for dynamic colors */
