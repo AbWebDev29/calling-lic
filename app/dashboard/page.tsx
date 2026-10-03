@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { ChartNoAxesCombined, House, LogOut, PhoneCall, Users } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
 import LeadsTable from "@/components/LeadsTable";
 import CallModal from "@/components/CallModal";
@@ -214,9 +216,9 @@ export default function Dashboard() {
   };
 
   const TABS = [
-    { id: "leads", label: "Leads", badge: leads.length },
-    { id: "logs", label: "Call Logs", badge: logs.filter(l => l.disposition !== "Pending").length },
-    { id: "analytics", label: "Analytics", badge: null },
+    { id: "leads", label: "Leads", badge: leads.length, icon: Users },
+    { id: "logs", label: "Call Logs", badge: logs.filter(l => l.disposition !== "Pending").length, icon: PhoneCall },
+    { id: "analytics", label: "Analytics", badge: null, icon: ChartNoAxesCombined },
   ];
 
   if (loading) {
@@ -229,7 +231,7 @@ export default function Dashboard() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-slate-50">
+      <div className="dashboard-shell min-h-screen bg-slate-50">
         {/* Modal */}
         <CallModal
           lead={selectedLead}
@@ -241,31 +243,27 @@ export default function Dashboard() {
         {/* Header */}
         <div className="dashboard-header bg-slate-900 px-7">
           <div className="dashboard-header-inner max-w-6xl mx-auto flex items-center justify-between gap-6 py-4">
-            <div className="flex-shrink-0">
-              <h1 className="text-white font-black text-lg leading-none">⚡ LeadTrack</h1>
-              <p className="text-slate-500 text-2xs mt-0.5">Lead Management & Call Tracker</p>
-            </div>
+            <Link href="/" className="dashboard-brand" aria-label="LeadTrack home">
+              <span className="dashboard-brand-mark">⚡</span>
+              <span><strong>LeadTrack</strong><small>Lead management workspace</small></span>
+            </Link>
 
-            <nav className="dashboard-nav flex gap-1">
+            <nav className="dashboard-nav flex gap-1" aria-label="Workspace navigation">
+              <Link href="/" className="dashboard-home-link">
+                <House size={16} strokeWidth={2} aria-hidden="true" />
+                <span>Home</span>
+              </Link>
               {TABS.map(t => (
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
-                  className={`px-4.5 py-2 rounded-lg text-xs font-bold cursor-pointer border-none flex items-center gap-1.75 transition-all ${
-                    tab === t.id
-                      ? "bg-white text-slate-900"
-                      : "bg-transparent text-slate-400 hover:text-white"
-                  }`}
+                  aria-current={tab === t.id ? "page" : undefined}
+                  className={`dashboard-nav-link ${tab === t.id ? "is-active" : ""}`}
                 >
-                  {t.label}
+                  <t.icon size={16} strokeWidth={2} aria-hidden="true" />
+                  <span>{t.label}</span>
                   {t.badge !== null && (
-                    <span
-                      className={`rounded-full text-2xs font-black px-1.75 leading-4 ${
-                        tab === t.id
-                          ? "bg-slate-900 text-white"
-                          : "bg-slate-800 text-slate-400"
-                      }`}
-                    >
+                    <span className="dashboard-nav-badge">
                       {t.badge}
                     </span>
                   )}
@@ -273,23 +271,25 @@ export default function Dashboard() {
               ))}
             </nav>
 
-            <div className="text-right flex-shrink-0 flex items-center gap-4">
-              <div className="text-slate-400 text-2xs">
-                <div className="text-slate-300">
+            <div className="dashboard-account">
+              <div className="dashboard-account-date">
+                <span>
                   {new Date().toLocaleDateString("en-IN", {
                     weekday: "short",
                     day: "numeric",
                     month: "short",
                     year: "numeric",
                   })}
-                </div>
-                <div className="text-emerald-400 font-bold mt-0.5">● Live</div>
+                </span>
+                <span className="dashboard-live"><i /> Active workspace</span>
               </div>
               <button
                 onClick={handleLogout}
-                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-colors"
+                className="dashboard-logout"
+                aria-label="Log out"
               >
-                Logout
+                <LogOut size={15} aria-hidden="true" />
+                <span>Log out</span>
               </button>
             </div>
           </div>
@@ -298,9 +298,18 @@ export default function Dashboard() {
         {/* Content */}
         <div className="dashboard-content max-w-6xl mx-auto px-7 py-7">
           {tab === "leads" && (
-            <LeadsTable
-              leads={leads}
-              onRefresh={() => {
+            <>
+              <div className="dashboard-page-intro">
+                <div>
+                  <div className="dashboard-breadcrumb"><Link href="/">Home</Link><span>/</span><strong>Leads</strong></div>
+                  <h1>Leads</h1>
+                  <p>Keep your contacts organized and move every conversation forward.</p>
+                </div>
+                <div className="dashboard-intro-count"><Users size={16} aria-hidden="true" /><span><strong>{leads.length.toLocaleString("en-IN")}</strong> total leads</span></div>
+              </div>
+              <LeadsTable
+                leads={leads}
+                onRefresh={() => {
                 // Refresh data
                 const fetchData = async () => {
                   const { data: userData } = await supabase.auth.getUser();
@@ -328,20 +337,25 @@ export default function Dashboard() {
                   }
                 };
                 fetchData();
-              }}
-              onCall={handleCall}
-            />
+                }}
+                onCall={handleCall}
+              />
+            </>
           )}
 
           {tab === "logs" && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-black text-slate-900">Call Logs</h2>
+              <div className="dashboard-section-heading">
+                <div>
+                  <div className="dashboard-breadcrumb"><Link href="/">Home</Link><span>/</span><strong>Call logs</strong></div>
+                  <h1>Call logs</h1>
+                  <p>Review outcomes and follow-ups from your recent conversations.</p>
+                </div>
                 <button
                   onClick={exportCSV}
-                  className="px-4.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors"
+                  className="dashboard-export-button"
                 >
-                  ⬇️ Export CSV
+                  ↓ Export CSV
                 </button>
               </div>
 
@@ -405,7 +419,16 @@ export default function Dashboard() {
           )}
 
           {tab === "analytics" && (
-            <Analytics logs={logs} leads={leads} onExport={exportCSV} />
+            <>
+              <div className="dashboard-page-intro">
+                <div>
+                  <div className="dashboard-breadcrumb"><Link href="/">Home</Link><span>/</span><strong>Analytics</strong></div>
+                  <h1>Analytics</h1>
+                  <p>See the activity and outcomes behind your lead pipeline.</p>
+                </div>
+              </div>
+              <Analytics logs={logs} leads={leads} onExport={exportCSV} />
+            </>
           )}
         </div>
       </div>

@@ -287,7 +287,7 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
       )}
 
       {/* Toolbar */}
-      <div className="flex gap-3 mb-6 flex-wrap items-center">
+      <div className="leads-toolbar flex gap-3 mb-6 flex-wrap items-center">
         <div className="relative flex-1 min-w-56">
           <input
             value={search}
@@ -305,8 +305,8 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
               onClick={() => setStatusFilter(s)}
               className={`px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${
                 statusFilter === s
-                  ? "bg-slate-900 text-white"
-                  : "border-1.5 border-slate-200 bg-white text-slate-600"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "border-1.5 border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:text-indigo-700"
               }`}
             >
               {s}
@@ -319,14 +319,14 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
             if (!showFilters) setDraftFilters(filters);
             setShowFilters(!showFilters);
           }}
-          className={`px-4 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-all border-1.5 ${showFilters || filters.length > 0 ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200"}`}
+          className={`px-4 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition-all border-1.5 ${showFilters || filters.length > 0 ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:border-indigo-200 hover:text-indigo-700"}`}
         >
           {filters.length > 0 ? `🎯 ${filters.length} Filters` : "🎯 Filter"}
         </button>
 
         <button
           onClick={() => fileRef.current?.click()}
-          className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap transition-colors"
+          className="leads-upload-button px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap transition-colors"
         >
           📤 Upload Excel
         </button>
