@@ -53,6 +53,14 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
   const [filters, setFilters] = useState<FilterCondition[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [draftFilters, setDraftFilters] = useState<FilterCondition[]>([]);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [savingLead, setSavingLead] = useState(false);
+  const [manualError, setManualError] = useState("");
+  const [manualSuccess, setManualSuccess] = useState("");
+  const [manualLead, setManualLead] = useState({
+    name: "", phone: "", email: "", leader_code: "", nop: "", prem: "",
+    utsaav: "", ulip: "", cat1: "", cat2: "", status: "New",
+  });
   const fileRef = useRef<HTMLInputElement>(null);
 
   const statusOptions = ["All", "New", "Interested", "Follow Up", "Contacted", "Not Interested"];
@@ -62,6 +70,57 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
   const updateFilter = (id: string, field: keyof FilterCondition, val: string) => setDraftFilters(draftFilters.map(f => f.id === id ? { ...f, [field]: val } : f));
   const applyFilters = () => { setFilters(draftFilters); setShowFilters(false); };
   const clearFilters = () => { setDraftFilters([]); setFilters([]); setShowFilters(false); };
+
+  const updateManualLead = (field: keyof typeof manualLead, value: string) => {
+    setManualLead(current => ({ ...current, [field]: value }));
+    setManualError("");
+    setManualSuccess("");
+  };
+
+  const saveManualLead = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSavingLead(true);
+    setManualError("");
+    setManualSuccess("");
+
+    try {
+      const { data: userData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!userData.user) throw new Error("Please sign in again before adding a lead.");
+
+      const { error } = await supabase.from("leads").insert({
+        user_id: userData.user.id,
+        name: manualLead.name.trim(),
+        phone: manualLead.phone.trim() || null,
+        email: manualLead.email.trim() || null,
+        leader_code: manualLead.leader_code.trim() || null,
+        nop: manualLead.nop ? Number(manualLead.nop) : null,
+        prem: manualLead.prem ? Number(manualLead.prem) : null,
+        utsaav: manualLead.utsaav ? Number(manualLead.utsaav) : null,
+        ulip: manualLead.ulip ? Number(manualLead.ulip) : null,
+        cat1: manualLead.cat1.trim() || null,
+        cat2: manualLead.cat2 ? Number(manualLead.cat2) : null,
+        status: manualLead.status,
+        source: "Manual",
+      } as never);
+
+      if (error) throw error;
+      setManualLead({ name: "", phone: "", email: "", leader_code: "", nop: "", prem: "", utsaav: "", ulip: "", cat1: "", cat2: "", status: "New" });
+      setShowManualForm(false);
+      setSearch("");
+      setStatusFilter("All");
+      setFilters([]);
+      setDraftFilters([]);
+      setShowFilters(false);
+      setManualSuccess("Lead added successfully.");
+      onRefresh();
+    } catch (error) {
+      console.error("Error adding lead:", error);
+      setManualError(error instanceof Error ? error.message : "Could not add this lead. Please try again.");
+    } finally {
+      setSavingLead(false);
+    }
+  };
 
   const visible = leads
     .filter(l => {
@@ -154,6 +213,79 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
       {/* Data Requirements Card */}
       <ExcelInfo />
 
+      {manualSuccess && (
+        <div className="manual-success" role="status">
+          <span>✓</span>{manualSuccess}
+          <button type="button" onClick={() => setManualSuccess("")} aria-label="Dismiss confirmation">×</button>
+        </div>
+      )}
+
+      {showManualForm && (
+        <div className="manual-modal-backdrop">
+          <section className="manual-modal" role="dialog" aria-modal="true" aria-labelledby="manual-lead-title">
+            <div className="manual-modal-header">
+              <div>
+                <span className="manual-modal-kicker">LEAD DETAILS</span>
+                <h2 id="manual-lead-title">Add a lead</h2>
+                <p>Enter the contact and tracking information below.</p>
+              </div>
+              <button
+                type="button"
+                className="manual-modal-close"
+                onClick={() => { setShowManualForm(false); setManualError(""); }}
+                aria-label="Close add lead form"
+              >×</button>
+            </div>
+
+            <form onSubmit={saveManualLead}>
+              <div className="manual-form-grid">
+                <label className="manual-field manual-field-wide">
+                  <span>Full name <b>*</b></span>
+                  <input autoFocus required maxLength={120} value={manualLead.name} onChange={e => updateManualLead("name", e.target.value)} placeholder="e.g. Ananya Sharma" />
+                </label>
+                <label className="manual-field">
+                  <span>Phone number</span>
+                  <input type="tel" maxLength={30} value={manualLead.phone} onChange={e => updateManualLead("phone", e.target.value)} placeholder="+91 98765 43210" />
+                </label>
+                <label className="manual-field">
+                  <span>Email address</span>
+                  <input type="email" maxLength={254} value={manualLead.email} onChange={e => updateManualLead("email", e.target.value)} placeholder="name@example.com" />
+                </label>
+                <label className="manual-field">
+                  <span>Leader code</span>
+                  <input maxLength={80} value={manualLead.leader_code} onChange={e => updateManualLead("leader_code", e.target.value)} placeholder="Optional" />
+                </label>
+                <label className="manual-field">
+                  <span>Status</span>
+                  <select value={manualLead.status} onChange={e => updateManualLead("status", e.target.value)}>
+                    {statusOptions.filter(status => status !== "All").map(status => <option key={status}>{status}</option>)}
+                    <option>Voicemail</option><option>No Answer</option><option>Do Not Call</option>
+                  </select>
+                </label>
+                <div className="manual-field-divider">Tracking data <span>Optional</span></div>
+                {([
+                  ["nop", "NOP"], ["prem", "PREM"], ["utsaav", "UTSAAV"], ["ulip", "ULIP"], ["cat2", "CAT2"],
+                ] as const).map(([field, label]) => (
+                  <label className="manual-field" key={field}>
+                    <span>{label}</span>
+                    <input type="number" min="0" step="any" value={manualLead[field]} onChange={e => updateManualLead(field, e.target.value)} placeholder="—" />
+                  </label>
+                ))}
+                <label className="manual-field">
+                  <span>CAT1</span>
+                  <input maxLength={80} value={manualLead.cat1} onChange={e => updateManualLead("cat1", e.target.value)} placeholder="Optional" />
+                </label>
+              </div>
+              {manualError && <div className="manual-error" role="alert">{manualError}</div>}
+              <div className="manual-modal-actions">
+                <button type="button" className="manual-cancel" onClick={() => { setShowManualForm(false); setManualError(""); }}>Cancel</button>
+                <button type="submit" className="manual-submit" disabled={savingLead}>{savingLead ? "Saving lead…" : "Add lead"}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex gap-3 mb-6 flex-wrap items-center">
         <div className="relative flex-1 min-w-56">
@@ -197,6 +329,13 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
           className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap transition-colors"
         >
           📤 Upload Excel
+        </button>
+        <button
+          type="button"
+          onClick={() => { setShowManualForm(true); setManualError(""); setManualSuccess(""); }}
+          className="manual-add-button"
+        >
+          <span aria-hidden="true">＋</span> Add lead
         </button>
         <input
           ref={fileRef}
