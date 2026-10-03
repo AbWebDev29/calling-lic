@@ -46,7 +46,7 @@ export default function LoginPage() {
       </div>
 
       {/* Card */}
-      <div className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
+      <div className="login-card relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="px-8 pt-8 pb-6 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
           <h1 className="text-3xl font-black mb-2">⚡ LeadTrack</h1>

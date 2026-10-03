@@ -239,14 +239,14 @@ export default function Dashboard() {
         />
 
         {/* Header */}
-        <div className="bg-slate-900 px-7">
-          <div className="max-w-6xl mx-auto flex items-center justify-between gap-6 py-4">
+        <div className="dashboard-header bg-slate-900 px-7">
+          <div className="dashboard-header-inner max-w-6xl mx-auto flex items-center justify-between gap-6 py-4">
             <div className="flex-shrink-0">
               <h1 className="text-white font-black text-lg leading-none">⚡ LeadTrack</h1>
               <p className="text-slate-500 text-2xs mt-0.5">Lead Management & Call Tracker</p>
             </div>
 
-            <nav className="flex gap-1">
+            <nav className="dashboard-nav flex gap-1">
               {TABS.map(t => (
                 <button
                   key={t.id}
@@ -296,7 +296,7 @@ export default function Dashboard() {
         </div>
 
         {/* Content */}
-        <div className="max-w-6xl mx-auto px-7 py-7">
+        <div className="dashboard-content max-w-6xl mx-auto px-7 py-7">
           {tab === "leads" && (
             <LeadsTable
               leads={leads}
@@ -345,7 +345,7 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+              <div className="table-scroll bg-white border border-slate-200 rounded-2xl overflow-hidden">
                 <table className="w-full border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">

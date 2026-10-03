@@ -279,7 +279,7 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+      <div className="table-scroll leads-table-scroll bg-white border border-slate-200 rounded-2xl overflow-hidden">
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
@@ -301,7 +301,7 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
                   key={lead.id}
                   className={`${i < visible.length - 1 ? "border-b border-slate-100" : ""} hover:bg-slate-50 transition-colors`}
                 >
-                  <td className="px-2 py-3.5">
+                  <td data-label="Lead" className="px-2 py-3.5 lead-card-title">
                     <div className="flex items-center gap-2.5">
                       <div
                         className="w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold flex-shrink-0"
@@ -315,27 +315,27 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
                       </div>
                     </div>
                   </td>
-                  <td className="px-2 py-3.5">
+                  <td data-label="Phone" className="px-2 py-3.5">
                     <span className="font-mono text-2xs text-slate-900 whitespace-nowrap">{formatPhone(lead.phone)}</span>
                   </td>
-                  <td className="px-2 py-3.5 text-slate-600 font-medium">{lead.leader_code || "-"}</td>
-                  <td className="px-2 py-3.5 text-slate-600 font-medium">{lead.nop || "-"}</td>
-                  <td className="px-2 py-3.5 text-slate-600 font-medium">{lead.prem || "-"}</td>
-                  <td className="px-2 py-3.5 text-slate-600 font-medium">{lead.utsaav || "-"}</td>
-                  <td className="px-2 py-3.5 text-slate-600 font-medium">{lead.ulip || "-"}</td>
-                  <td className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat1 || "-"}</td>
-                  <td className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat2 || "-"}</td>
-                  <td className="px-2 py-3.5">
+                  <td data-label="Leader code" className="px-2 py-3.5 text-slate-600 font-medium">{lead.leader_code || "-"}</td>
+                  <td data-label="NOP" className="px-2 py-3.5 text-slate-600 font-medium">{lead.nop || "-"}</td>
+                  <td data-label="PREM" className="px-2 py-3.5 text-slate-600 font-medium">{lead.prem || "-"}</td>
+                  <td data-label="UTSAAV" className="px-2 py-3.5 text-slate-600 font-medium">{lead.utsaav || "-"}</td>
+                  <td data-label="ULIP" className="px-2 py-3.5 text-slate-600 font-medium">{lead.ulip || "-"}</td>
+                  <td data-label="CAT1" className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat1 || "-"}</td>
+                  <td data-label="CAT2" className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat2 || "-"}</td>
+                  <td data-label="Status" className="px-2 py-3.5">
                     <span className={`inline-block px-2.5 py-1 text-2xs font-bold rounded-full border whitespace-nowrap ${colors.bg} ${colors.text} ${colors.border}`}>
                       {lead.status}
                     </span>
                   </td>
-                  <td className="px-2 py-3.5">
+                  <td data-label="Source" className="px-2 py-3.5">
                     <span className="text-2xs text-slate-400 font-medium whitespace-nowrap">
                       {lead.source === "Excel" ? "📊 Excel" : "✍️ Manual"}
                     </span>
                   </td>
-                  <td className="px-2 py-3.5">
+                  <td data-label="Action" className="px-2 py-3.5 lead-card-action">
                     <button
                       onClick={() => onCall(lead)}
                       className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1.5 transition-colors whitespace-nowrap"
