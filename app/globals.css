@@ -106,7 +106,11 @@ button:not(:disabled):active { transform: translateY(1px); }
 .leads-upload-button:hover { border-color: #c7d2fe; }
 .table-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
 .table-scroll table { min-width: 760px; }
-.leads-table-scroll table { min-width: 1060px; }
+.leads-table-scroll table { min-width: 1420px; }
+.lead-call-entry { display: flex; min-width: 9rem; flex-direction: column; gap: .22rem; }
+.lead-call-entry > span:first-child { color: #64748b; font-size: .62rem; font-weight: 700; white-space: nowrap; }
+.lead-call-entry > span:last-child { max-width: 13rem; overflow: hidden; color: #8490a3; font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
+.lead-call-empty { color: #a0a8b7; font-size: .65rem; }
 
 .landing-page { position: relative; isolation: isolate; padding-inline: clamp(1.25rem, 7vw, 7rem); }
 .landing-header, .landing-hero, .landing-highlights, .landing-footer { position: relative; z-index: 1; width: min(100%, 78rem); margin-inline: auto; }
@@ -368,6 +372,11 @@ button:not(:disabled):active { transform: translateY(1px); }
   }
   .leads-table-scroll tbody > tr > .lead-card-action::before { display: none; }
   .leads-table-scroll tbody > tr > .lead-card-action button { width: 100%; justify-content: center; padding-block: .65rem; }
+  .leads-table-scroll tbody > tr > td[data-label="Latest call"],
+  .leads-table-scroll tbody > tr > td[data-label="Previous call"] { align-items: flex-start; flex-direction: column; gap: .35rem; text-align: left; }
+  .lead-call-entry { min-width: 0; width: 100%; gap: .18rem; }
+  .lead-call-entry > span:first-child { font-size: .59rem; }
+  .lead-call-entry > span:last-child { max-width: 100%; font-size: .62rem; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 }
 
 @media (prefers-reduced-motion: reduce) {

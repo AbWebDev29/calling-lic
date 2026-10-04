@@ -3,6 +3,8 @@
 import { useState, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import ExcelInfo from "./ExcelInfo";
+import SafeDate from "./SafeDate";
+import { LEAD_STATUSES, normalizeLeadStatus } from "@/lib/leadStatus";
 import * as XLSX from "xlsx";
 
 interface Lead {
@@ -22,6 +24,14 @@ interface Lead {
   source: string;
 }
 
+interface CallLog {
+  id: number;
+  lead_id: number;
+  disposition: string;
+  notes?: string;
+  called_at: string;
+}
+
 type FilterCondition = {
   id: string;
   column: keyof Lead;
@@ -30,24 +40,22 @@ type FilterCondition = {
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  "New": { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-  "Contacted": { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
-  "Interested": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  "Positive": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  "Negative": { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
   "Follow Up": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-  "Not Interested": { bg: "bg-red-50", text: "text-red-700", border: "border-red-200" },
-  "Voicemail": { bg: "bg-slate-50", text: "text-slate-700", border: "border-slate-200" },
-  "No Answer": { bg: "bg-slate-50", text: "text-slate-700", border: "border-slate-200" },
-  "Pending": { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
-  "Do Not Call": { bg: "bg-red-50", text: "text-red-900", border: "border-red-200" },
+  "Contacted": { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
+  "Wrong Number": { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
+  "Not Picked": { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200" },
 };
 
 interface LeadsTableProps {
   leads: Lead[];
+  logs: CallLog[];
   onRefresh: () => void;
   onCall: (lead: Lead) => void;
 }
 
-export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps) {
+export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTableProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -59,11 +67,11 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
   const [manualSuccess, setManualSuccess] = useState("");
   const [manualLead, setManualLead] = useState({
     name: "", phone: "", email: "", leader_code: "", nop: "", prem: "",
-    utsaav: "", ulip: "", cat1: "", cat2: "", status: "New",
+    utsaav: "", ulip: "", cat1: "", cat2: "", status: "Not Picked",
   });
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const statusOptions = ["All", "New", "Interested", "Follow Up", "Contacted", "Not Interested"];
+  const statusOptions = ["All", ...LEAD_STATUSES];
 
   const addFilter = () => setDraftFilters([...draftFilters, { id: Math.random().toString(), column: 'name', operator: 'contains', value: '' }]);
   const removeFilter = (id: string) => setDraftFilters(draftFilters.filter(f => f.id !== id));
@@ -105,7 +113,7 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
       } as never);
 
       if (error) throw error;
-      setManualLead({ name: "", phone: "", email: "", leader_code: "", nop: "", prem: "", utsaav: "", ulip: "", cat1: "", cat2: "", status: "New" });
+      setManualLead({ name: "", phone: "", email: "", leader_code: "", nop: "", prem: "", utsaav: "", ulip: "", cat1: "", cat2: "", status: "Not Picked" });
       setShowManualForm(false);
       setSearch("");
       setStatusFilter("All");
@@ -129,11 +137,11 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
         (l.company && l.company.toLowerCase().includes(search.toLowerCase())) ||
         (l.leader_code && l.leader_code.toLowerCase().includes(search.toLowerCase())) ||
         l.phone.includes(search);
-      const matchStatus = statusFilter === "All" || l.status === statusFilter;
+      const matchStatus = statusFilter === "All" || normalizeLeadStatus(l.status) === statusFilter;
       
       const matchFilters = filters.every(f => {
         if (!f.value) return true;
-        const val = l[f.column];
+        const val = f.column === "status" ? normalizeLeadStatus(l.status) : l[f.column];
         if (val === undefined || val === null) return false;
         
         const numVal = Number(val);
@@ -149,8 +157,7 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
       });
 
       return matchSearch && matchStatus && matchFilters;
-    })
-    .slice(0, 5000);
+    });
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.currentTarget.files?.[0];
@@ -179,7 +186,7 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
           ulip: r.ULIP || r.ulip || 0,
           cat1: r.CAT1 || r.cat1 || "",
           cat2: r.CAT2 || r.cat2 || 0,
-          status: "New",
+          status: "Not Picked",
           source: "Excel",
           user_id: userData.user.id,
         }));
@@ -207,6 +214,23 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
 
   const formatPhone = (p: string) =>
     p.replace(/(\+\d{2})(\d{5})(\d{5})/, "$1 $2 $3") || p;
+
+  const latestCallsByLead = new Map<number, CallLog[]>();
+  logs.forEach(log => {
+    if (log.disposition === "Pending") return;
+    const entries = latestCallsByLead.get(log.lead_id) || [];
+    if (entries.length < 2) {
+      entries.push(log);
+      latestCallsByLead.set(log.lead_id, entries);
+    }
+  });
+
+  const renderCallEntry = (entry?: CallLog) => entry ? (
+    <div className="lead-call-entry">
+      <SafeDate date={entry.called_at} />
+      <span>{entry.notes?.trim() || "No notes"}</span>
+    </div>
+  ) : <span className="lead-call-empty">No calls yet</span>;
 
   return (
     <div>
@@ -259,7 +283,6 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
                   <span>Status</span>
                   <select value={manualLead.status} onChange={e => updateManualLead("status", e.target.value)}>
                     {statusOptions.filter(status => status !== "All").map(status => <option key={status}>{status}</option>)}
-                    <option>Voicemail</option><option>No Answer</option><option>Do Not Call</option>
                   </select>
                 </label>
                 <div className="manual-field-divider">Tracking data <span>Optional</span></div>
@@ -422,7 +445,7 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              {["Lead", "Phone", "L.Code", "NOP", "PREM", "UTSAAV", "ULIP", "CAT1", "CAT2", "Status", "Source", "Action"].map(h => (
+              {["Lead", "Phone", "L.Code", "NOP", "PREM", "UTSAAV", "ULIP", "CAT1", "CAT2", "Status", "Latest call", "Previous call", "Source", "Action"].map(h => (
                 <th
                   key={h}
                   className="px-2 py-3 text-left font-bold text-slate-600 text-2xs uppercase tracking-wider"
@@ -434,7 +457,8 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
           </thead>
           <tbody>
             {visible.map((lead, i) => {
-              const colors = STATUS_COLORS[lead.status] || STATUS_COLORS["New"];
+              const normalizedStatus = normalizeLeadStatus(lead.status);
+              const colors = STATUS_COLORS[normalizedStatus] || STATUS_COLORS["Not Picked"];
               return (
                 <tr
                   key={lead.id}
@@ -466,9 +490,11 @@ export default function LeadsTable({ leads, onRefresh, onCall }: LeadsTableProps
                   <td data-label="CAT2" className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat2 || "-"}</td>
                   <td data-label="Status" className="px-2 py-3.5">
                     <span className={`inline-block px-2.5 py-1 text-2xs font-bold rounded-full border whitespace-nowrap ${colors.bg} ${colors.text} ${colors.border}`}>
-                      {lead.status}
+                      {normalizedStatus}
                     </span>
                   </td>
+                  <td data-label="Latest call" className="px-2 py-3.5">{renderCallEntry(latestCallsByLead.get(lead.id)?.[0])}</td>
+                  <td data-label="Previous call" className="px-2 py-3.5">{renderCallEntry(latestCallsByLead.get(lead.id)?.[1])}</td>
                   <td data-label="Source" className="px-2 py-3.5">
                     <span className="text-2xs text-slate-400 font-medium whitespace-nowrap">
                       {lead.source === "Excel" ? "📊 Excel" : "✍️ Manual"}

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { ChartNoAxesCombined, House, LogOut, PhoneCall, Users } from "lucide-react";
+import { normalizeLeadStatus } from "@/lib/leadStatus";
 import AuthGuard from "@/components/AuthGuard";
 import LeadsTable from "@/components/LeadsTable";
 import CallModal from "@/components/CallModal";
@@ -38,6 +39,40 @@ interface CallLog {
   called_at: string;
 }
 
+const PAGE_SIZE = 1000;
+
+async function fetchAllLeads(userId: string): Promise<Lead[]> {
+  const allLeads: Lead[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("leads")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data as Lead[] | null) || [];
+    allLeads.push(...page);
+    if (page.length < PAGE_SIZE) return allLeads;
+  }
+}
+
+async function fetchAllCallLogs(userId: string): Promise<CallLog[]> {
+  const allLogs: CallLog[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("call_logs")
+      .select("*")
+      .eq("user_id", userId)
+      .order("called_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data as CallLog[] | null) || [];
+    allLogs.push(...page);
+    if (page.length < PAGE_SIZE) return allLogs;
+  }
+}
+
 export default function Dashboard() {
   const [tab, setTab] = useState("leads");
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -46,7 +81,26 @@ export default function Dashboard() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [currentLogId, setCurrentLogId] = useState<number | null>(null);
+  const [returnedFromDialer, setReturnedFromDialer] = useState(false);
+  const dialerOpenedRef = useRef(false);
+  const dialerOpenedAtRef = useRef(0);
   const router = useRouter();
+
+  useEffect(() => {
+    const handleReturnToPage = () => {
+      if (dialerOpenedRef.current && Date.now() - dialerOpenedAtRef.current > 1000 && document.visibilityState === "visible") {
+        dialerOpenedRef.current = false;
+        setReturnedFromDialer(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleReturnToPage);
+    window.addEventListener("focus", handleReturnToPage);
+    return () => {
+      document.removeEventListener("visibilitychange", handleReturnToPage);
+      window.removeEventListener("focus", handleReturnToPage);
+    };
+  }, []);
 
   // Fetch leads and logs
   useEffect(() => {
@@ -58,40 +112,21 @@ export default function Dashboard() {
           return;
         }
 
-        // Fetch leads with pagination to support up to 5000
-        let allLeads: Lead[] = [];
-        let hasMore = true;
-        let from = 0;
-        let limit = 1000;
-        while (hasMore && allLeads.length < 5000) {
-          const { data: leadsData, error: leadsError } = await supabase
-            .from("leads")
-            .select("*")
-            .eq("user_id", userData.user.id)
-            .order("created_at", { ascending: false })
-            .range(from, from + limit - 1);
-
-          if (leadsError) throw leadsError;
-          if (leadsData && leadsData.length > 0) {
-            allLeads = [...allLeads, ...(leadsData as Lead[])];
-            from += limit;
-          }
-          if (!leadsData || leadsData.length < limit) {
-            hasMore = false;
-          }
-        }
-
-        // Fetch call logs
-        const { data: logsData, error: logsError } = await supabase
-          .from("call_logs")
-          .select("*")
-          .eq("user_id", userData.user.id)
-          .order("called_at", { ascending: false });
-
-        if (logsError) throw logsError;
-
+        const [allLeads, allLogs] = await Promise.all([
+          fetchAllLeads(userData.user.id),
+          fetchAllCallLogs(userData.user.id),
+        ]);
         setLeads(allLeads);
-        setLogs((logsData as CallLog[]) || []);
+        setLogs(allLogs);
+
+        const pendingLog = allLogs.find(log => log.disposition === "Pending");
+        const pendingLead = pendingLog && allLeads.find(lead => lead.id === pendingLog.lead_id);
+        if (pendingLog && pendingLead) {
+          setSelectedLead(pendingLead);
+          setCurrentLogId(pendingLog.id);
+          setModalOpen(true);
+          setReturnedFromDialer(true);
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -103,13 +138,20 @@ export default function Dashboard() {
   }, [router]);
 
   const handleCall = async (lead: Lead) => {
-    setSelectedLead(lead);
-    setModalOpen(true);
+    if (!lead.phone?.trim()) {
+      alert("This lead does not have a phone number yet.");
+      return;
+    }
+    dialerOpenedRef.current = false;
+    setReturnedFromDialer(false);
+    setCurrentLogId(null);
 
-    // Create a pending log entry
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData.user) {
-      const { data } = await supabase
+    try {
+      const { data: userData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!userData.user) throw new Error("Please sign in again before placing a call.");
+
+      const { data, error: insertError } = await supabase
         .from("call_logs")
         .insert({
           lead_id: lead.id,
@@ -123,13 +165,24 @@ export default function Dashboard() {
         .select()
         .single();
 
-      if (data) {
-        setCurrentLogId((data as any).id);
-      }
-    }
+      if (insertError) throw insertError;
+      if (!data) throw new Error("The call could not be added to your call history.");
 
-    // Trigger the phone call
-    window.location.href = `tel:${lead.phone}`;
+      const pendingCall = data as CallLog;
+      setCurrentLogId(pendingCall.id);
+      setLogs(current => [pendingCall, ...current]);
+      setSelectedLead(lead);
+      setModalOpen(true);
+
+      // Open the native dialer only after the pending call record exists.
+      dialerOpenedRef.current = true;
+      dialerOpenedAtRef.current = Date.now();
+      const dialNumber = lead.phone.replace(/[^\d+*#,;]/g, "");
+      window.location.href = `tel:${dialNumber}`;
+    } catch (error) {
+      console.error("Error starting call:", error);
+      alert(error instanceof Error ? error.message : "Could not start this call.");
+    }
   };
 
   const handleSaveLog = async (disposition: string, notes: string) => {
@@ -148,33 +201,26 @@ export default function Dashboard() {
       await supabase
         .from("leads")
         .update({
-          status: disposition === "Do Not Call" ? "Not Interested" : disposition,
+          status: disposition,
         } as never)
         .eq("id", selectedLead.id);
 
       // Refresh data
       const { data: userData } = await supabase.auth.getUser();
       if (userData.user) {
-        const { data: leadsData } = await supabase
-          .from("leads")
-          .select("*")
-          .eq("user_id", userData.user.id)
-          .order("created_at", { ascending: false })
-          .limit(1000); // Only refresh top recent locally
-
-        const { data: logsData } = await supabase
-          .from("call_logs")
-          .select("*")
-          .eq("user_id", userData.user.id)
-          .order("called_at", { ascending: false });
-
-        if (leadsData) setLeads(leadsData as Lead[]);
-        if (logsData) setLogs(logsData as CallLog[]);
+        const [allLeads, allLogs] = await Promise.all([
+          fetchAllLeads(userData.user.id),
+          fetchAllCallLogs(userData.user.id),
+        ]);
+        setLeads(allLeads);
+        setLogs(allLogs);
       }
 
       setModalOpen(false);
       setSelectedLead(null);
       setCurrentLogId(null);
+      setReturnedFromDialer(false);
+      dialerOpenedRef.current = false;
     } catch (error) {
       console.error("Error saving log:", error);
       alert("Failed to save call log");
@@ -192,6 +238,9 @@ export default function Dashboard() {
     setModalOpen(false);
     setSelectedLead(null);
     setCurrentLogId(null);
+    setReturnedFromDialer(false);
+    dialerOpenedRef.current = false;
+    setLogs(current => current.filter(log => log.id !== currentLogId));
   };
 
   const exportCSV = () => {
@@ -199,7 +248,7 @@ export default function Dashboard() {
     const csv = [
       ["#", "Lead Name", "Company", "Phone", "Disposition", "Notes", "Date & Time"].join(","),
       ...active.map(l =>
-        [l.id, `"${l.lead_name}"`, `"${l.company}"`, l.phone, l.disposition, `"${(l.notes || "").replace(/"/g, "`")}"`, new Date(l.called_at).toLocaleString("en-IN")].join(",")
+        [l.id, `"${l.lead_name}"`, `"${l.company}"`, l.phone, normalizeLeadStatus(l.disposition), `"${(l.notes || "").replace(/"/g, "`")}"`, new Date(l.called_at).toLocaleString("en-IN")].join(",")
       )
     ].join("\n");
 
@@ -236,6 +285,7 @@ export default function Dashboard() {
         <CallModal
           lead={selectedLead}
           isOpen={modalOpen}
+          callReturnedFromDialer={returnedFromDialer}
           onClose={handleCancel}
           onSave={handleSaveLog}
         />
@@ -309,34 +359,11 @@ export default function Dashboard() {
               </div>
               <LeadsTable
                 leads={leads}
+                logs={logs}
                 onRefresh={() => {
-                // Refresh data
-                const fetchData = async () => {
-                  const { data: userData } = await supabase.auth.getUser();
-                  if (userData.user) {
-                    let allLeads: Lead[] = [];
-                    let hasMore = true;
-                    let from = 0;
-                    let limit = 1000;
-                    while (hasMore && allLeads.length < 5000) {
-                      const { data: leadsData } = await supabase
-                        .from("leads")
-                        .select("*")
-                        .eq("user_id", userData.user.id)
-                        .order("created_at", { ascending: false })
-                        .range(from, from + limit - 1);
-                      if (leadsData && leadsData.length > 0) {
-                        allLeads = [...allLeads, ...(leadsData as Lead[])];
-                        from += limit;
-                      }
-                      if (!leadsData || leadsData.length < limit) {
-                        hasMore = false;
-                      }
-                    }
-                    setLeads(allLeads);
-                  }
-                };
-                fetchData();
+                  supabase.auth.getUser().then(({ data }) => {
+                    if (data.user) fetchAllLeads(data.user.id).then(setLeads).catch(error => console.error("Error refreshing leads:", error));
+                  });
                 }}
                 onCall={handleCall}
               />
@@ -398,7 +425,7 @@ export default function Dashboard() {
                             </td>
                             <td className="px-4 py-3.5">
                               <span className="inline-block px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-2xs font-bold rounded-full">
-                                {log.disposition}
+                                {normalizeLeadStatus(log.disposition)}
                               </span>
                             </td>
                             <td className="px-4 py-3.5 text-slate-600 max-w-48">

@@ -51,13 +51,13 @@ export default function Home() {
             <div className="preview-stats">
               <div><span>Active leads</span><strong>248</strong><small>↑ 12 this week</small></div>
               <div><span>Calls made</span><strong>36</strong><small>↑ 8 today</small></div>
-              <div><span>Interested</span><strong>18</strong><small>7.3% conversion</small></div>
+              <div><span>Positive leads</span><strong>18</strong><small>7.3% conversion</small></div>
             </div>
             <div className="preview-panel">
               <div className="preview-panel-heading"><strong>Recent leads</strong><span>View all →</span></div>
               {[
-                ["AS", "Ananya Sharma", "New", "blue"],
-                ["RK", "Rohan Kapoor", "Interested", "green"],
+                ["AS", "Ananya Sharma", "Not Picked", "blue"],
+                ["RK", "Rohan Kapoor", "Positive", "green"],
                 ["MP", "Meera Patel", "Follow up", "amber"],
               ].map(([initials, name, status, tone]) => (
                 <div className="preview-lead" key={name}>

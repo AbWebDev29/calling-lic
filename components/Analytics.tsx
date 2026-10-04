@@ -6,6 +6,7 @@ import {
   CartesianGrid, PieChart, Pie, Cell, Legend
 } from "recharts";
 import SafeDate from "./SafeDate";
+import { normalizeLeadStatus } from "@/lib/leadStatus";
 
 interface Lead {
   id: number;
@@ -29,12 +30,12 @@ interface AnalyticsProps {
 }
 
 const DISP_COLORS: Record<string, string> = {
-  "Interested": "#10b981",
-  "Not Interested": "#ef4444",
-  "No Answer": "#94a3b8",
-  "Voicemail": "#8b5cf6",
+  "Positive": "#10b981",
+  "Negative": "#ef4444",
+  "Not Picked": "#0ea5e9",
+  "Wrong Number": "#64748b",
+  "Contacted": "#6366f1",
   "Follow Up": "#f59e0b",
-  "Do Not Call": "#dc2626",
 };
 
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
@@ -78,7 +79,8 @@ export default function Analytics({ logs, leads, onExport }: AnalyticsProps) {
   const dispData = useMemo(() => {
     const counts: Record<string, number> = {};
     activeLogs.forEach(l => {
-      counts[l.disposition] = (counts[l.disposition] || 0) + 1;
+      const disposition = normalizeLeadStatus(l.disposition);
+      counts[disposition] = (counts[disposition] || 0) + 1;
     });
     return Object.entries(counts).map(([name, value]) => ({
       name,
@@ -88,7 +90,7 @@ export default function Analytics({ logs, leads, onExport }: AnalyticsProps) {
   }, [activeLogs]);
 
   const totalCalls = activeLogs.length;
-  const hotLeads = leads.filter(l => l.status === "Interested").length;
+  const hotLeads = leads.filter(l => normalizeLeadStatus(l.status) === "Positive").length;
   const callsToday = activeLogs.filter(
     l => new Date(l.called_at).toDateString() === new Date().toDateString()
   ).length;
@@ -102,14 +104,14 @@ export default function Analytics({ logs, leads, onExport }: AnalyticsProps) {
           leadName: l.lead_name,
           company: l.company,
           count: 0,
-          lastDisp: l.disposition,
+          lastDisp: normalizeLeadStatus(l.disposition),
           lastTs: l.called_at
         };
       }
       acc[l.lead_id].count++;
       if (l.called_at > acc[l.lead_id].lastTs) {
         acc[l.lead_id].lastTs = l.called_at;
-        acc[l.lead_id].lastDisp = l.disposition;
+        acc[l.lead_id].lastDisp = normalizeLeadStatus(l.disposition);
       }
       return acc;
     }, {})
@@ -120,7 +122,7 @@ export default function Analytics({ logs, leads, onExport }: AnalyticsProps) {
       {/* Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-7">
         <StatCard icon="📞" label="Total Calls Logged" value={totalCalls} accent="#6366f1" />
-        <StatCard icon="🔥" label="Interested Leads" value={hotLeads} accent="#10b981" />
+        <StatCard icon="🔥" label="Positive Leads" value={hotLeads} accent="#10b981" />
         <StatCard icon="📅" label="Calls Today" value={callsToday} accent="#f59e0b" />
         <StatCard icon="📈" label="Conversion Rate" value={`${convRate}%`} accent="#ec4899" />
       </div>

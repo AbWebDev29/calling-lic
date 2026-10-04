@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { LEAD_STATUSES } from "@/lib/leadStatus";
 
 interface Lead {
   id: number;
@@ -12,21 +13,30 @@ interface Lead {
 interface CallModalProps {
   lead: Lead | null;
   isOpen: boolean;
+  callReturnedFromDialer: boolean;
   onClose: () => void;
-  onSave: (disposition: string, notes: string) => void;
+  onSave: (disposition: string, notes: string) => Promise<void>;
 }
 
-const DISPOSITIONS = ["Interested", "Not Interested", "No Answer", "Voicemail", "Follow Up", "Do Not Call"];
+const DISPOSITIONS = LEAD_STATUSES;
 
-export default function CallModal({ lead, isOpen, onClose, onSave }: CallModalProps) {
-  const [disposition, setDisposition] = useState("Interested");
+export default function CallModal({ lead, isOpen, callReturnedFromDialer, onClose, onSave }: CallModalProps) {
+  const [disposition, setDisposition] = useState("");
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDisposition("");
+      setNotes("");
+      setIsSaving(false);
+    }
+  }, [isOpen, lead?.id]);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      onSave(disposition, notes);
+      await onSave(disposition, notes);
     } finally {
       setIsSaving(false);
     }
@@ -61,10 +71,10 @@ export default function CallModal({ lead, isOpen, onClose, onSave }: CallModalPr
         </div>
 
         {/* Call initiated message */}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 mb-5.5 text-xs text-emerald-700">
-          📞 Call initiated to <strong className="font-mono">{formatPhone(lead.phone)}</strong>
-          <br />
-          <span className="text-2xs text-emerald-600">Your device dialer should have opened (tel: protocol)</span>
+        <div className={`rounded-xl p-3 mb-5.5 text-xs ${callReturnedFromDialer ? "bg-indigo-50 border border-indigo-200 text-indigo-800" : "bg-slate-50 border border-slate-200 text-slate-700"}`}>
+          <strong>{callReturnedFromDialer ? "Welcome back" : "Your phone dialer is opening"}</strong>
+          <div className="mt-1">Call to <strong className="font-mono">{formatPhone(lead.phone)}</strong></div>
+          <div className="text-2xs mt-1 opacity-80">Choose the outcome below to save this call and update the lead.</div>
         </div>
 
         {/* Disposition select */}
@@ -73,8 +83,10 @@ export default function CallModal({ lead, isOpen, onClose, onSave }: CallModalPr
           <select
             value={disposition}
             onChange={e => setDisposition(e.target.value)}
+            required
             className="block w-full mt-1.5 px-3.5 py-2.5 border-1.5 border-slate-200 rounded-lg text-sm bg-white outline-none cursor-pointer text-slate-900 font-bold"
           >
+            <option value="" disabled>Choose an outcome</option>
             {DISPOSITIONS.map(d => (
               <option key={d} value={d}>
                 {d}
@@ -107,7 +119,7 @@ export default function CallModal({ lead, isOpen, onClose, onSave }: CallModalPr
           </button>
           <button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || !disposition}
             className="flex-auto px-0 py-2.75 bg-slate-900 text-white border-none rounded-lg text-sm font-bold cursor-pointer hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             {isSaving ? "Saving..." : "✅ Save Log"}

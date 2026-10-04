@@ -19,7 +19,7 @@ CREATE TABLE leads (
   ulip         NUMERIC,
   cat1         TEXT,
   cat2         NUMERIC,
-  status       TEXT DEFAULT 'New',
+  status       TEXT DEFAULT 'Not Picked',
   source       TEXT DEFAULT 'Manual',
   created_at   TIMESTAMPTZ DEFAULT NOW(),
   updated_at   TIMESTAMPTZ DEFAULT NOW()
