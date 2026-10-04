@@ -5,9 +5,9 @@ import * as XLSX from "xlsx";
 export default function ExcelInfo() {
   const downloadTemplate = () => {
     const data = [
-      ["NAME", "PHONE", "Email", "leader code", "NOP", "PREM", "UTSAAV", "ULIP", "CAT1", "CAT2"],
-      ["John Doe", "+1234567890", "john@example.com", "LDR123", 5, 10000, 2000, 5000, "A1", 1],
-      ["Jane Smith", "+0987654321", "jane@smith.com", "LDR456", 2, 5000, 1000, 2000, "B2", 2]
+      ["NAME", "PHONE", "Email", "leader code", "NOP", "PREM", "UTSAAV", "ULIP"],
+      ["John Doe", "+1234567890", "john@example.com", "LDR123", 5, 10000, 2000, 5000],
+      ["Jane Smith", "+0987654321", "jane@smith.com", "LDR456", 2, 5000, 1000, 2000]
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -32,9 +32,7 @@ export default function ExcelInfo() {
             <code className="bg-indigo-100 px-1 rounded font-bold">NOP</code>,{" "}
             <code className="bg-indigo-100 px-1 rounded font-bold">PREM</code>,{" "}
             <code className="bg-indigo-100 px-1 rounded font-bold">UTSAAV</code>,{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">ULIP</code>,{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">CAT1</code>,{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">CAT2</code>.
+            <code className="bg-indigo-100 px-1 rounded font-bold">ULIP</code>.
           </p>
           <button
             onClick={downloadTemplate}
