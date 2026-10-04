@@ -106,7 +106,7 @@ button:not(:disabled):active { transform: translateY(1px); }
 .leads-upload-button:hover { border-color: #c7d2fe; }
 .table-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
 .table-scroll table { min-width: 760px; }
-.leads-table-scroll table { min-width: 1420px; }
+.leads-table-scroll table { min-width: 1100px; }
 .lead-call-entry { display: flex; min-width: 9rem; flex-direction: column; gap: .22rem; }
 .lead-call-entry > span:first-child { color: #64748b; font-size: .62rem; font-weight: 700; white-space: nowrap; }
 .lead-call-entry > span:last-child { max-width: 13rem; overflow: hidden; color: #8490a3; font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }

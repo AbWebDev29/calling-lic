@@ -39,15 +39,6 @@ type FilterCondition = {
   value: string;
 };
 
-const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  "Positive": { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-  "Negative": { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
-  "Follow Up": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-  "Contacted": { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
-  "Wrong Number": { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
-  "Not Picked": { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200" },
-};
-
 interface LeadsTableProps {
   leads: Lead[];
   logs: CallLog[];
@@ -445,7 +436,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTabl
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              {["Lead", "Phone", "L.Code", "NOP", "PREM", "UTSAAV", "ULIP", "CAT1", "CAT2", "Status", "Latest call", "Previous call", "Source", "Action"].map(h => (
+              {["Lead", "Phone", "L.Code", "NOP", "PREM", "UTSAAV", "ULIP", "Latest call", "Previous call", "Action"].map(h => (
                 <th
                   key={h}
                   className="px-2 py-3 text-left font-bold text-slate-600 text-2xs uppercase tracking-wider"
@@ -457,8 +448,6 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTabl
           </thead>
           <tbody>
             {visible.map((lead, i) => {
-              const normalizedStatus = normalizeLeadStatus(lead.status);
-              const colors = STATUS_COLORS[normalizedStatus] || STATUS_COLORS["Not Picked"];
               return (
                 <tr
                   key={lead.id}
@@ -486,20 +475,8 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTabl
                   <td data-label="PREM" className="px-2 py-3.5 text-slate-600 font-medium">{lead.prem || "-"}</td>
                   <td data-label="UTSAAV" className="px-2 py-3.5 text-slate-600 font-medium">{lead.utsaav || "-"}</td>
                   <td data-label="ULIP" className="px-2 py-3.5 text-slate-600 font-medium">{lead.ulip || "-"}</td>
-                  <td data-label="CAT1" className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat1 || "-"}</td>
-                  <td data-label="CAT2" className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat2 || "-"}</td>
-                  <td data-label="Status" className="px-2 py-3.5">
-                    <span className={`inline-block px-2.5 py-1 text-2xs font-bold rounded-full border whitespace-nowrap ${colors.bg} ${colors.text} ${colors.border}`}>
-                      {normalizedStatus}
-                    </span>
-                  </td>
                   <td data-label="Latest call" className="px-2 py-3.5">{renderCallEntry(latestCallsByLead.get(lead.id)?.[0])}</td>
                   <td data-label="Previous call" className="px-2 py-3.5">{renderCallEntry(latestCallsByLead.get(lead.id)?.[1])}</td>
-                  <td data-label="Source" className="px-2 py-3.5">
-                    <span className="text-2xs text-slate-400 font-medium whitespace-nowrap">
-                      {lead.source === "Excel" ? "📊 Excel" : "✍️ Manual"}
-                    </span>
-                  </td>
                   <td data-label="Action" className="px-2 py-3.5 lead-card-action">
                     <button
                       onClick={() => onCall(lead)}
