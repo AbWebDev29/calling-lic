@@ -11,6 +11,7 @@ import { normalizeLeadStatus } from "@/lib/leadStatus";
 interface Lead {
   id: number;
   status: string;
+  submanager_name?: string;
 }
 
 interface CallLog {
@@ -27,6 +28,7 @@ interface AnalyticsProps {
   logs: CallLog[];
   leads: Lead[];
   onExport: () => void;
+  showSubmanager?: boolean;
 }
 
 const DISP_COLORS: Record<string, string> = {
@@ -60,7 +62,7 @@ function StatCard({ icon, label, value, accent }: { icon: string; label: string;
   );
 }
 
-export default function Analytics({ logs, leads, onExport }: AnalyticsProps) {
+export default function Analytics({ logs, leads, onExport, showSubmanager = false }: AnalyticsProps) {
   const activeLogs = logs.filter(l => l.disposition !== "Pending");
 
   const weekData = useMemo(() => {
@@ -97,12 +99,13 @@ export default function Analytics({ logs, leads, onExport }: AnalyticsProps) {
   const convRate = leads.length ? Math.round((hotLeads / leads.length) * 100) : 0;
 
   const topPerformers = Object.values(
-    activeLogs.reduce((acc: Record<number, { leadId: number; leadName: string; company: string; count: number; lastDisp: string; lastTs: string }>, l) => {
+    activeLogs.reduce((acc: Record<number, { leadId: number; leadName: string; company: string; submanagerName: string; count: number; lastDisp: string; lastTs: string }>, l) => {
       if (!acc[l.lead_id]) {
         acc[l.lead_id] = {
           leadId: l.lead_id,
           leadName: l.lead_name,
           company: l.company,
+          submanagerName: leads.find(lead => lead.id === l.lead_id)?.submanager_name || "—",
           count: 0,
           lastDisp: normalizeLeadStatus(l.disposition),
           lastTs: l.called_at
@@ -187,7 +190,7 @@ export default function Analytics({ logs, leads, onExport }: AnalyticsProps) {
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="border-b border-slate-100">
-              {["Lead", "Company", "Total Calls", "Last Disposition", "Last Call"].map(h => (
+              {(showSubmanager ? ["Lead", "Submanager", "Company", "Total Calls", "Last Disposition", "Last Call"] : ["Lead", "Company", "Total Calls", "Last Disposition", "Last Call"]).map(h => (
                 <th
                   key={h}
                   className="px-3 py-2 text-left font-black text-slate-400 text-2xs uppercase tracking-tighter"
@@ -201,6 +204,7 @@ export default function Analytics({ logs, leads, onExport }: AnalyticsProps) {
             {topPerformers.map((row, i) => (
               <tr key={row.leadId} className={`${i < 4 ? "border-b border-slate-50" : ""}`}>
                 <td className="px-3 py-2.5 font-bold text-slate-900">{row.leadName}</td>
+                {showSubmanager && <td className="px-3 py-2.5 text-slate-600">{row.submanagerName}</td>}
                 <td className="px-3 py-2.5 text-slate-600">{row.company}</td>
                 <td className="px-3 py-2.5 font-black text-indigo-600">{row.count}</td>
                 <td className="px-3 py-2.5">

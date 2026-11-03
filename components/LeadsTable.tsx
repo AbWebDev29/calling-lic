@@ -454,7 +454,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              {["Lead", "Phone", "L.Code", "NOP", "PREM", "UTSAAV", "ULIP", "Latest call", "Previous call", "Action"].map(h => (
+              {(canManage ? ["Lead", "Submanager", "Phone", "L.Code", "NOP", "PREM", "UTSAAV", "ULIP", "Latest call", "Previous call", "Action"] : ["Lead", "Phone", "L.Code", "NOP", "PREM", "UTSAAV", "ULIP", "Latest call", "Previous call", "Action"]).map(h => (
                 <th
                   key={h}
                   className="px-2 py-3 text-left font-bold text-slate-600 text-2xs uppercase tracking-wider"
@@ -485,6 +485,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
                       </div>
                     </div>
                   </td>
+                  {canManage && <td data-label="Submanager" className="px-2 py-3.5 text-slate-600 font-medium">{lead.submanager_name || "—"}</td>}
                   <td data-label="Phone" className="px-2 py-3.5">
                     <span className="font-mono text-2xs text-slate-900 whitespace-nowrap">{formatPhone(lead.phone)}</span>
                   </td>

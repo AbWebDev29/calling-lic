@@ -286,10 +286,11 @@ export default function Dashboard() {
 
   const exportCSV = () => {
     const active = logs.filter(l => l.disposition !== "Pending");
+    const submanagerHeader = role === "manager";
     const csv = [
-      ["#", "Lead Name", "Company", "Phone", "Disposition", "Notes", "Date & Time"].join(","),
+      ["#", "Lead Name", ...(submanagerHeader ? ["Submanager"] : []), "Company", "Phone", "Disposition", "Notes", "Date & Time"].join(","),
       ...active.map(l =>
-        [l.id, `"${l.lead_name}"`, `"${l.company}"`, l.phone, normalizeLeadStatus(l.disposition), `"${(l.notes || "").replace(/"/g, "`")}"`, new Date(l.called_at).toLocaleString("en-IN")].join(",")
+        [l.id, `"${l.lead_name}"`, ...(submanagerHeader ? [`"${leads.find(lead => lead.id === l.lead_id)?.submanager_name || ""}"`] : []), `"${l.company}"`, l.phone, normalizeLeadStatus(l.disposition), `"${(l.notes || "").replace(/"/g, "`")}"`, new Date(l.called_at).toLocaleString("en-IN")].join(",")
       )
     ].join("\n");
 
@@ -435,7 +436,7 @@ export default function Dashboard() {
                 <table className="w-full border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
-                      {["Lead", "Company", "Phone", "Disposition", "Notes", "Date & Time"].map(h => (
+                      {(role === "manager" ? ["Lead", "Submanager", "Company", "Phone", "Disposition", "Notes", "Date & Time"] : ["Lead", "Company", "Phone", "Disposition", "Notes", "Date & Time"]).map(h => (
                         <th
                           key={h}
                           className="px-4 py-3 text-left font-bold text-slate-600 text-2xs uppercase tracking-wider"
@@ -448,7 +449,7 @@ export default function Dashboard() {
                   <tbody>
                     {logs.filter(l => l.disposition !== "Pending").length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-12 text-slate-400">
+                        <td colSpan={role === "manager" ? 7 : 6} className="text-center py-12 text-slate-400">
                           <div className="text-4xl mb-2">📋</div>
                           No call logs yet
                         </td>
@@ -462,6 +463,7 @@ export default function Dashboard() {
                             className={`${i < logs.filter(l => l.disposition !== "Pending").length - 1 ? "border-b border-slate-100" : ""}`}
                           >
                             <td className="px-4 py-3.5 font-bold text-slate-900">{log.lead_name}</td>
+                            {role === "manager" && <td className="px-4 py-3.5 text-slate-600">{leads.find(lead => lead.id === log.lead_id)?.submanager_name || "—"}</td>}
                             <td className="px-4 py-3.5 text-slate-600">{log.company}</td>
                             <td className="px-4 py-3.5">
                               <span className="font-mono text-2xs text-slate-900">
@@ -499,7 +501,7 @@ export default function Dashboard() {
                   <p>See the activity and outcomes behind your lead pipeline.</p>
                 </div>
               </div>
-              <Analytics logs={logs} leads={leads} onExport={exportCSV} />
+              <Analytics logs={logs} leads={leads} onExport={exportCSV} showSubmanager={role === "manager"} />
             </>
           )}
 
