@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import { ChartNoAxesCombined, House, LogOut, PhoneCall, Users } from "lucide-react";
+import { ChartNoAxesCombined, House, LogOut, PhoneCall, Users, UserRoundCog } from "lucide-react";
 import { normalizeLeadStatus } from "@/lib/leadStatus";
 import AuthGuard from "@/components/AuthGuard";
 import LeadsTable from "@/components/LeadsTable";
@@ -16,6 +16,9 @@ interface Lead {
   name: string;
   phone: string;
   email: string;
+  submanager_name?: string;
+  submanager_id?: string | null;
+  manager_id?: string;
   company?: string;
   leader_code?: string;
   nop?: number;
@@ -37,17 +40,19 @@ interface CallLog {
   disposition: string;
   notes?: string;
   called_at: string;
+  manager_id?: string;
+  user_id?: string;
 }
 
 const PAGE_SIZE = 1000;
 
-async function fetchAllLeads(userId: string): Promise<Lead[]> {
+async function fetchAllLeads(userId: string, role = "manager"): Promise<Lead[]> {
   const allLeads: Lead[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from("leads")
       .select("*")
-      .eq("user_id", userId)
+      .eq(role === "manager" ? "manager_id" : "submanager_id", userId)
       .order("created_at", { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
@@ -57,13 +62,13 @@ async function fetchAllLeads(userId: string): Promise<Lead[]> {
   }
 }
 
-async function fetchAllCallLogs(userId: string): Promise<CallLog[]> {
+async function fetchAllCallLogs(userId: string, role = "manager"): Promise<CallLog[]> {
   const allLogs: CallLog[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from("call_logs")
       .select("*")
-      .eq("user_id", userId)
+      .eq(role === "manager" ? "manager_id" : "user_id", userId)
       .order("called_at", { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
@@ -82,6 +87,12 @@ export default function Dashboard() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [currentLogId, setCurrentLogId] = useState<number | null>(null);
   const [returnedFromDialer, setReturnedFromDialer] = useState(false);
+  const [role, setRole] = useState("manager");
+  const [managerId, setManagerId] = useState("");
+  const [submanagers, setSubmanagers] = useState<{id:string; name:string; email:string}[]>([]);
+  const [peopleMessage, setPeopleMessage] = useState("");
+  const [peopleBusy, setPeopleBusy] = useState(false);
+  const [dashboardError, setDashboardError] = useState("");
   const dialerOpenedRef = useRef(false);
   const dialerOpenedAtRef = useRef(0);
   const router = useRouter();
@@ -102,6 +113,25 @@ export default function Dashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!managerId) return;
+    const refresh = async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return;
+      const [allLeads, allLogs] = await Promise.all([
+        fetchAllLeads(role === "manager" ? managerId : userData.user.id, role),
+        fetchAllCallLogs(role === "manager" ? managerId : userData.user.id, role),
+      ]);
+      setLeads(allLeads);
+      setLogs(allLogs);
+    };
+    const channel = supabase.channel(`workspace-${managerId}-${role}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "call_logs" }, refresh)
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [managerId, role]);
+
   // Fetch leads and logs
   useEffect(() => {
     const fetchData = async () => {
@@ -112,14 +142,21 @@ export default function Dashboard() {
           return;
         }
 
+        const { data: profile, error: profileError } = await supabase.from("profiles").select("role, manager_id").eq("id", userData.user.id).single();
+        if (profileError) throw profileError;
+        const userRole = profile.role as string;
+        const ownerId = userRole === "manager" ? userData.user.id : profile.manager_id as string;
+        setRole(userRole); setManagerId(ownerId);
+        const { data: people } = await supabase.from("profiles").select("id, name, email").eq("manager_id", ownerId).eq("role", "submanager");
+        setSubmanagers((people || []) as {id:string; name:string; email:string}[]);
         const [allLeads, allLogs] = await Promise.all([
-          fetchAllLeads(userData.user.id),
-          fetchAllCallLogs(userData.user.id),
+          fetchAllLeads(userRole === "manager" ? ownerId : userData.user.id, userRole),
+          fetchAllCallLogs(userRole === "manager" ? ownerId : userData.user.id, userRole),
         ]);
         setLeads(allLeads);
         setLogs(allLogs);
 
-        const pendingLog = allLogs.find(log => log.disposition === "Pending");
+        const pendingLog = allLogs.find(log => log.disposition === "Pending" && log.user_id === userData.user.id);
         const pendingLead = pendingLog && allLeads.find(lead => lead.id === pendingLog.lead_id);
         if (pendingLog && pendingLead) {
           setSelectedLead(pendingLead);
@@ -128,7 +165,8 @@ export default function Dashboard() {
           setReturnedFromDialer(true);
         }
       } catch (error) {
-        console.error("Error fetching data:", error);
+        const message = error instanceof Error ? error.message : String((error as { message?: string })?.message || "Unknown database error");
+        setDashboardError(message);
       } finally {
         setLoading(false);
       }
@@ -161,6 +199,7 @@ export default function Dashboard() {
           disposition: "Pending",
           notes: "",
           user_id: userData.user.id,
+          manager_id: managerId,
         } as never)
         .select()
         .single();
@@ -198,19 +237,20 @@ export default function Dashboard() {
       if (error) throw error;
 
       // Update the lead status
-      await supabase
+      const { error: leadUpdateError } = await supabase
         .from("leads")
         .update({
           status: disposition,
         } as never)
         .eq("id", selectedLead.id);
+      if (leadUpdateError) throw leadUpdateError;
 
       // Refresh data
       const { data: userData } = await supabase.auth.getUser();
       if (userData.user) {
         const [allLeads, allLogs] = await Promise.all([
-          fetchAllLeads(userData.user.id),
-          fetchAllCallLogs(userData.user.id),
+          fetchAllLeads(role === "manager" ? managerId : userData.user.id, role),
+          fetchAllCallLogs(role === "manager" ? managerId : userData.user.id, role),
         ]);
         setLeads(allLeads);
         setLogs(allLogs);
@@ -268,6 +308,7 @@ export default function Dashboard() {
     { id: "leads", label: "Leads", badge: leads.length, icon: Users },
     { id: "logs", label: "Call Logs", badge: logs.filter(l => l.disposition !== "Pending").length, icon: PhoneCall },
     { id: "analytics", label: "Analytics", badge: null, icon: ChartNoAxesCombined },
+    ...(role === "manager" ? [{ id: "people", label: "People and Access", badge: null, icon: UserRoundCog }] : []),
   ];
 
   if (loading) {
@@ -347,6 +388,7 @@ export default function Dashboard() {
 
         {/* Content */}
         <div className="dashboard-content max-w-6xl mx-auto px-7 py-7">
+          {dashboardError && <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">Could not load your workspace: {dashboardError}. Check that the latest `supabase-schema.sql` has been applied.</div>}
           {tab === "leads" && (
             <>
               <div className="dashboard-page-intro">
@@ -362,10 +404,12 @@ export default function Dashboard() {
                 logs={logs}
                 onRefresh={() => {
                   supabase.auth.getUser().then(({ data }) => {
-                    if (data.user) fetchAllLeads(data.user.id).then(setLeads).catch(error => console.error("Error refreshing leads:", error));
+                    if (data.user) fetchAllLeads(role === "manager" ? managerId : data.user.id, role).then(setLeads).catch(error => console.error("Error refreshing leads:", error));
                   });
                 }}
                 onCall={handleCall}
+                canManage={role === "manager"}
+                submanagers={submanagers}
               />
             </>
           )}
@@ -456,6 +500,51 @@ export default function Dashboard() {
               </div>
               <Analytics logs={logs} leads={leads} onExport={exportCSV} />
             </>
+          )}
+
+          {tab === "people" && role === "manager" && (
+            <section className="bg-white border border-slate-200 rounded-2xl p-6">
+              <h1 className="text-2xl font-bold text-slate-900">People and Access</h1>
+              <p className="text-sm text-slate-500 mt-2">Upload an Excel file with submanagerName, email, and password columns to create submanager accounts.</p>
+              <input className="mt-5 block" type="file" accept=".xlsx,.xls,.csv" onChange={async event => {
+                const input = event.currentTarget;
+                const file = input.files?.[0]; if (!file) return;
+                setPeopleBusy(true); setPeopleMessage("");
+                try {
+                  const XLSX = await import("xlsx");
+                  const bytes = await file.arrayBuffer();
+                  const workbook = XLSX.read(bytes, { type: "array" });
+                  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+                  const findColumn = (row: Record<string, unknown>, expected: string[]) => {
+                    const aliases = new Set(expected.map(value => value.toLowerCase().replace(/[\s_-]/g, "")));
+                    return Object.keys(row).find(column => aliases.has(column.replace(/^\uFEFF/, "").trim().toLowerCase().replace(/[\s_-]/g, "")));
+                  };
+                  const accounts = rows.map(row => {
+                    const nameKey = findColumn(row, ["submanagerName", "name"]);
+                    const emailKey = findColumn(row, ["email"]);
+                    const passwordKey = findColumn(row, ["password"]);
+                    return {
+                      name: nameKey ? String(row[nameKey] ?? "").trim() : "",
+                      email: emailKey ? String(row[emailKey] ?? "").trim() : "",
+                      password: passwordKey ? String(row[passwordKey] ?? "") : "",
+                    };
+                  });
+                  const invalidRows = accounts.filter(row => !row.name || !row.email || !row.password);
+                  const validAccounts = accounts.filter(row => row.name && row.email && row.password);
+                  if (!validAccounts.length) throw new Error(`No valid rows found. Use columns submanagerName, email, password. Found: ${rows[0] ? Object.keys(rows[0]).join(", ") : "an empty sheet"}.`);
+                  const { data: session } = await supabase.auth.getSession();
+                  const response = await fetch("/api/submanagers", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.session?.access_token || ""}` }, body: JSON.stringify({ accounts: validAccounts }) });
+                  const result = await response.json(); if (!response.ok) throw new Error(result.error || "Account creation failed.");
+                  setSubmanagers(current => [...current.filter(person => !result.people.some((created: { email: string }) => created.email.toLowerCase() === person.email.toLowerCase())), ...result.people]);
+                  const skipped = invalidRows.length ? ` Skipped ${invalidRows.length} incomplete row(s).` : "";
+                  setPeopleMessage(`Created ${result.created} account(s).${skipped}${result.errors?.length ? ` ${result.errors.length} row(s) failed: ${result.errors.join("; ")}` : ""}`);
+                } catch (error) { setPeopleMessage(error instanceof Error ? error.message : "Could not process this file."); }
+                finally { setPeopleBusy(false); input.value = ""; }
+              }} />
+              {peopleBusy && <p className="mt-3 text-sm">Creating accounts…</p>}
+              {peopleMessage && <p className="mt-3 text-sm text-indigo-700">{peopleMessage}</p>}
+              <div className="mt-6 divide-y divide-slate-100">{submanagers.map(person => <div key={person.id} className="py-3 flex justify-between"><strong>{person.name}</strong><span>{person.email}</span></div>)}</div>
+            </section>
           )}
         </div>
       </div>

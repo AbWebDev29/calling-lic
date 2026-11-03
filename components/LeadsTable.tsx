@@ -12,6 +12,8 @@ interface Lead {
   name: string;
   phone: string;
   email: string;
+  submanager_name?: string;
+  submanager_id?: string | null;
   company?: string;
   leader_code?: string;
   nop?: number;
@@ -44,9 +46,11 @@ interface LeadsTableProps {
   logs: CallLog[];
   onRefresh: () => void;
   onCall: (lead: Lead) => void;
+  canManage?: boolean;
+  submanagers?: { id: string; name: string }[];
 }
 
-export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTableProps) {
+export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage = true, submanagers = [] }: LeadsTableProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -89,6 +93,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTabl
 
       const { error } = await supabase.from("leads").insert({
         user_id: userData.user.id,
+        manager_id: userData.user.id,
         name: manualLead.name.trim(),
         phone: manualLead.phone.trim() || null,
         email: manualLead.email.trim() || null,
@@ -166,10 +171,15 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTabl
           return;
         }
 
-        const leads = (data as Record<string, any>[]).map((r: any, i: number) => ({
+        const assignmentFor = (row: Record<string, any>) => {
+          const key = Object.keys(row).find(column => column.toLowerCase().replace(/[ _]/g, "") === "submanagername");
+          return key ? String(row[key] || "").trim() : "";
+        };
+        const leads = (data as Record<string, any>[]).map((r: any) => ({
           name: r.NAME || r.Name || r.name || r["Full Name"] || "Unknown",
           phone: String(r.PHONE || r.Phone || r.phone || r["Phone Number"] || ""),
-          email: r.Email || r.email || r.EMAIL || "",
+          email: r.email || r.Email || r.EMAIL || "",
+          submanager_name: assignmentFor(r),
           leader_code: r["leader code"] || r.leader_code || r.LEADER_CODE || "",
           nop: r.NOP || r.nop || 0,
           prem: r.PREM || r.prem || 0,
@@ -180,6 +190,8 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTabl
           status: "Not Picked",
           source: "Excel",
           user_id: userData.user.id,
+          manager_id: userData.user.id,
+          submanager_id: submanagers.find(person => person.name.trim().toLowerCase() === assignmentFor(r).toLowerCase())?.id || null,
         }));
 
         const { error } = await supabase
@@ -187,6 +199,12 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTabl
           .insert(leads as never);
 
         if (error) throw error;
+        const unmatched = (data as Record<string, any>[]).filter(row => {
+          const key = Object.keys(row).find(column => column.toLowerCase().replace(/[ _]/g, "") === "submanagername");
+          const value = key ? row[key] : "";
+          return value && !submanagers.some(person => person.name.trim().toLowerCase() === String(value).trim().toLowerCase());
+        });
+        if (unmatched.length) alert(`${unmatched.length} row(s) were uploaded without an assignment because subManagerName did not match a People and Access name.`);
         onRefresh();
       } catch (error) {
         console.error(error);
@@ -226,7 +244,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTabl
   return (
     <div>
       {/* Data Requirements Card */}
-      <ExcelInfo />
+      {canManage && <ExcelInfo />}
 
       {manualSuccess && (
         <div className="manual-success" role="status">
@@ -235,7 +253,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTabl
         </div>
       )}
 
-      {showManualForm && (
+      {canManage && showManualForm && (
         <div className="manual-modal-backdrop">
           <section className="manual-modal" role="dialog" aria-modal="true" aria-labelledby="manual-lead-title">
             <div className="manual-modal-header">
@@ -338,27 +356,27 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall }: LeadsTabl
           {filters.length > 0 ? `🎯 ${filters.length} Filters` : "🎯 Filter"}
         </button>
 
-        <button
+        {canManage && <button
           onClick={() => fileRef.current?.click()}
           className="leads-upload-button px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap transition-colors"
         >
           📤 Upload Excel
-        </button>
-        <button
+        </button>}
+        {canManage && <button
           type="button"
           onClick={() => { setShowManualForm(true); setManualError(""); setManualSuccess(""); }}
           className="manual-add-button"
         >
           <span aria-hidden="true">＋</span> Add lead
-        </button>
-        <input
+        </button>}
+        {canManage && <input
           ref={fileRef}
           type="file"
           accept=".xlsx,.xls,.csv"
           className="hidden"
           onChange={handleFileUpload}
           aria-label="Upload Excel file"
-        />
+        />}
       </div>
 
       {showFilters && (

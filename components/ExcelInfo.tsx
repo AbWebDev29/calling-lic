@@ -5,9 +5,9 @@ import * as XLSX from "xlsx";
 export default function ExcelInfo() {
   const downloadTemplate = () => {
     const data = [
-      ["NAME", "PHONE", "Email", "leader code", "NOP", "PREM", "UTSAAV", "ULIP"],
-      ["John Doe", "+1234567890", "john@example.com", "LDR123", 5, 10000, 2000, 5000],
-      ["Jane Smith", "+0987654321", "jane@smith.com", "LDR456", 2, 5000, 1000, 2000]
+      ["name", "phone", "email", "submanager_name", "leader_code", "nop", "prem", "utsaav", "ulip"],
+      ["John Doe", "+1234567890", "john@example.com", "Anvi", "LDR123", 5, 10000, 2000, 5000],
+      ["Jane Smith", "+0987654321", "jane@smith.com", "Anvi", "LDR456", 2, 5000, 1000, 2000]
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -24,15 +24,10 @@ export default function ExcelInfo() {
             Data Requirements
           </h3>
           <p className="text-sm text-indigo-800 mb-3 leading-relaxed">
-            Your Excel file must include these exact headers:{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">NAME</code>,{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">PHONE</code>,{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">Email</code>,{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">leader code</code>,{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">NOP</code>,{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">PREM</code>,{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">UTSAAV</code>,{" "}
-            <code className="bg-indigo-100 px-1 rounded font-bold">ULIP</code>.
+            Include <code className="bg-indigo-100 px-1 rounded font-bold">name</code>,{" "}
+            <code className="bg-indigo-100 px-1 rounded font-bold">phone</code>,{" "}
+            <code className="bg-indigo-100 px-1 rounded font-bold">email</code>, and{" "}
+            <code className="bg-indigo-100 px-1 rounded font-bold">submanager_name</code> to assign a caller. Optional columns: leader_code, nop, prem, utsaav, ulip.
           </p>
           <button
             onClick={downloadTemplate}
