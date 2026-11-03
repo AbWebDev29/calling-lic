@@ -142,8 +142,9 @@ export default function Dashboard() {
           return;
         }
 
-        const { data: profile, error: profileError } = await supabase.from("profiles").select("role, manager_id").eq("id", userData.user.id).single();
+        const { data: profileData, error: profileError } = await supabase.from("profiles").select("role, manager_id").eq("id", userData.user.id).single();
         if (profileError) throw profileError;
+        const profile = profileData as unknown as { role: string; manager_id: string | null };
         const userRole = profile.role as string;
         const ownerId = userRole === "manager" ? userData.user.id : profile.manager_id as string;
         setRole(userRole); setManagerId(ownerId);

@@ -10,7 +10,9 @@ export async function POST(request: Request) {
   const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   const missing = [!url && "NEXT_PUBLIC_SUPABASE_URL", !anonKey && "NEXT_PUBLIC_SUPABASE_ANON_KEY", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY)"]
     .filter(Boolean);
-  if (missing.length) return Response.json({ error: `Missing server environment variable(s): ${missing.join(", ")}. Restart the Next.js server after adding them.` }, { status: 500 });
+  if (missing.length || !url || !anonKey || !serviceKey) {
+    return Response.json({ error: `Missing server environment variable(s): ${missing.join(", ")}. Restart the Next.js server after adding them.` }, { status: 500 });
+  }
 
   const authClient = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: { user }, error: authError } = await authClient.auth.getUser(token);
