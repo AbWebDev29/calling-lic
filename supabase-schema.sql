@@ -83,6 +83,15 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS submanager_name TEXT;
 UPDATE leads SET manager_id = user_id WHERE manager_id IS NULL;
 COMMENT ON COLUMN leads.submanager_name IS 'Submanager assignment imported from the master Excel subManagerName column; matched against profiles.name.';
 
+-- Link existing master rows to submanager accounts by name, case-insensitively.
+UPDATE leads l
+SET submanager_id = p.id
+FROM profiles p
+WHERE p.role = 'submanager'
+  AND p.manager_id = l.manager_id
+  AND lower(btrim(p.name)) = lower(btrim(l.submanager_name))
+  AND l.submanager_id IS NULL;
+
 ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS manager_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 UPDATE call_logs c SET manager_id = l.manager_id FROM leads l WHERE c.lead_id = l.id AND c.manager_id IS NULL;
 
@@ -120,12 +129,40 @@ DROP POLICY IF EXISTS "Managers insert leads" ON leads;
 DROP POLICY IF EXISTS "Managers and assigned submanagers update leads" ON leads;
 DROP POLICY IF EXISTS "Managers delete leads" ON leads;
 CREATE POLICY "Managers and assigned submanagers view leads" ON leads FOR SELECT
-USING (manager_id = auth.uid() OR submanager_id = auth.uid());
+USING (
+  manager_id = auth.uid()
+  OR submanager_id = auth.uid()
+  OR EXISTS (
+    SELECT 1 FROM profiles p
+    WHERE p.id = auth.uid()
+      AND p.role = 'submanager'
+      AND p.manager_id = leads.manager_id
+      AND lower(btrim(p.name)) = lower(btrim(COALESCE(leads.submanager_name, '')))
+  )
+);
 CREATE POLICY "Managers insert leads" ON leads FOR INSERT
 WITH CHECK (manager_id = auth.uid() AND user_id = auth.uid());
 CREATE POLICY "Managers and assigned submanagers update leads" ON leads FOR UPDATE
-USING (manager_id = auth.uid() OR submanager_id = auth.uid())
-WITH CHECK (manager_id = auth.uid() OR submanager_id = auth.uid());
+USING (
+  manager_id = auth.uid()
+  OR submanager_id = auth.uid()
+  OR EXISTS (
+    SELECT 1 FROM profiles p
+    WHERE p.id = auth.uid() AND p.role = 'submanager'
+      AND p.manager_id = leads.manager_id
+      AND lower(btrim(p.name)) = lower(btrim(COALESCE(leads.submanager_name, '')))
+  )
+)
+WITH CHECK (
+  manager_id = auth.uid()
+  OR submanager_id = auth.uid()
+  OR EXISTS (
+    SELECT 1 FROM profiles p
+    WHERE p.id = auth.uid() AND p.role = 'submanager'
+      AND p.manager_id = leads.manager_id
+      AND lower(btrim(p.name)) = lower(btrim(COALESCE(leads.submanager_name, '')))
+  )
+);
 CREATE POLICY "Managers delete leads" ON leads FOR DELETE
 USING (manager_id = auth.uid());
 
@@ -142,7 +179,15 @@ USING (user_id = auth.uid() OR manager_id = auth.uid());
 CREATE POLICY "Caller inserts call logs for assigned leads" ON call_logs FOR INSERT
 WITH CHECK (user_id = auth.uid() AND EXISTS (
   SELECT 1 FROM leads l WHERE l.id = call_logs.lead_id AND l.manager_id = call_logs.manager_id
-    AND (l.submanager_id = auth.uid() OR l.manager_id = auth.uid())
+    AND (
+      l.submanager_id = auth.uid()
+      OR l.manager_id = auth.uid()
+      OR EXISTS (
+        SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'submanager'
+          AND p.manager_id = l.manager_id
+          AND lower(btrim(p.name)) = lower(btrim(COALESCE(l.submanager_name, '')))
+      )
+    )
 ));
 CREATE POLICY "Caller and manager update call logs" ON call_logs FOR UPDATE
 USING (user_id = auth.uid() OR manager_id = auth.uid())

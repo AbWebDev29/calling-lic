@@ -46,13 +46,15 @@ interface CallLog {
 
 const PAGE_SIZE = 1000;
 
-async function fetchAllLeads(userId: string, role = "manager"): Promise<Lead[]> {
+async function fetchAllLeads(userId: string, role = "manager", ownerManagerId = userId): Promise<Lead[]> {
   const allLeads: Lead[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from("leads")
       .select("*")
-      .eq(role === "manager" ? "manager_id" : "submanager_id", userId)
+      // RLS returns only the signed-in submanager's assigned rows. Filtering by
+      // manager keeps the query scoped while allowing name-based legacy matches.
+      .eq("manager_id", role === "manager" ? userId : ownerManagerId)
       .order("created_at", { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
@@ -119,7 +121,7 @@ export default function Dashboard() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) return;
       const [allLeads, allLogs] = await Promise.all([
-        fetchAllLeads(role === "manager" ? managerId : userData.user.id, role),
+        fetchAllLeads(role === "manager" ? managerId : userData.user.id, role, managerId),
         fetchAllCallLogs(role === "manager" ? managerId : userData.user.id, role),
       ]);
       setLeads(allLeads);
@@ -151,7 +153,7 @@ export default function Dashboard() {
         const { data: people } = await supabase.from("profiles").select("id, name, email").eq("manager_id", ownerId).eq("role", "submanager");
         setSubmanagers((people || []) as {id:string; name:string; email:string}[]);
         const [allLeads, allLogs] = await Promise.all([
-          fetchAllLeads(userRole === "manager" ? ownerId : userData.user.id, userRole),
+          fetchAllLeads(userRole === "manager" ? ownerId : userData.user.id, userRole, ownerId),
           fetchAllCallLogs(userRole === "manager" ? ownerId : userData.user.id, userRole),
         ]);
         setLeads(allLeads);
@@ -250,7 +252,7 @@ export default function Dashboard() {
       const { data: userData } = await supabase.auth.getUser();
       if (userData.user) {
         const [allLeads, allLogs] = await Promise.all([
-          fetchAllLeads(role === "manager" ? managerId : userData.user.id, role),
+          fetchAllLeads(role === "manager" ? managerId : userData.user.id, role, managerId),
           fetchAllCallLogs(role === "manager" ? managerId : userData.user.id, role),
         ]);
         setLeads(allLeads);
@@ -406,7 +408,7 @@ export default function Dashboard() {
                 logs={logs}
                 onRefresh={() => {
                   supabase.auth.getUser().then(({ data }) => {
-                    if (data.user) fetchAllLeads(role === "manager" ? managerId : data.user.id, role).then(setLeads).catch(error => console.error("Error refreshing leads:", error));
+                    if (data.user) fetchAllLeads(role === "manager" ? managerId : data.user.id, role, managerId).then(setLeads).catch(error => console.error("Error refreshing leads:", error));
                   });
                 }}
                 onCall={handleCall}
