@@ -2,7 +2,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Manager and submanager access
 
-Apply the full `supabase-schema.sql` in the Supabase SQL Editor when setting up the database. It creates manager profiles for existing auth users and adds row assignment and shared call history policies. Back up existing data before applying schema changes.
+Apply the full `supabase-schema.sql` in the Supabase SQL Editor when setting up the database. It creates manager profiles for existing auth users, archives preexisting leads as a selectable history file, and adds row assignment, file history, and shared call history policies. Back up existing data before applying schema changes.
 
 Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and either `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` in `.env.local` and the production server environment. Keep this server key private; it is only used by the account creation API. Restart `npm run dev` after adding it. New self sign-ups receive manager profiles. Managers create submanager accounts from **People and Access** by uploading a spreadsheet with `submanagerName`, `email`, and `password` columns. Master lead uploads use `name`, `phone`, `email`, `submanager_name`, `leader_code`, `nop`, `prem`, `utsaav`, and `ulip`; names match the People and Access `submanagerName` without case sensitivity.
 

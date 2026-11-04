@@ -34,6 +34,14 @@ interface CallLog {
   called_at: string;
 }
 
+interface MasterFile {
+  id: string;
+  manager_id: string;
+  file_name: string;
+  row_count: number;
+  uploaded_at: string;
+}
+
 type FilterCondition = {
   id: string;
   column: keyof Lead;
@@ -48,9 +56,11 @@ interface LeadsTableProps {
   onCall: (lead: Lead) => void;
   canManage?: boolean;
   submanagers?: { id: string; name: string }[];
+  fileId: string | null;
+  onFileUploaded: (file: MasterFile) => void;
 }
 
-export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage = true, submanagers = [] }: LeadsTableProps) {
+export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage = true, submanagers = [], fileId, onFileUploaded }: LeadsTableProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -94,6 +104,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
       const { error } = await supabase.from("leads").insert({
         user_id: userData.user.id,
         manager_id: userData.user.id,
+        file_id: fileId,
         name: manualLead.name.trim(),
         phone: manualLead.phone.trim() || null,
         email: manualLead.email.trim() || null,
@@ -164,6 +175,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
       try {
         const wb = XLSX.read(evt.target?.result, { type: "binary" });
         const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+        if (!data.length) throw new Error("The selected Excel sheet has no lead rows.");
 
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) {
@@ -194,21 +206,34 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
           submanager_id: submanagers.find(person => person.name.trim().toLowerCase() === assignmentFor(r).toLowerCase())?.id || null,
         }));
 
+        const { data: masterFileData, error: fileError } = await supabase.from("master_files").insert({
+          manager_id: userData.user.id,
+          file_name: file.name,
+          row_count: leads.length,
+        } as never).select().single();
+        if (fileError) throw fileError;
+        if (!masterFileData) throw new Error("Could not create a file history record.");
+        const masterFile = masterFileData as unknown as MasterFile;
+        const leadsForFile = leads.map(lead => ({ ...lead, file_id: masterFile.id }));
+
         const { error } = await supabase
           .from("leads")
-          .insert(leads as never);
+          .insert(leadsForFile as never);
 
-        if (error) throw error;
+        if (error) {
+          await supabase.from("master_files").delete().eq("id", masterFile.id);
+          throw error;
+        }
         const unmatched = (data as Record<string, any>[]).filter(row => {
           const key = Object.keys(row).find(column => column.toLowerCase().replace(/[ _]/g, "") === "submanagername");
           const value = key ? row[key] : "";
           return value && !submanagers.some(person => person.name.trim().toLowerCase() === String(value).trim().toLowerCase());
         });
         if (unmatched.length) alert(`${unmatched.length} row(s) were uploaded without an assignment because subManagerName did not match a People and Access name.`);
-        onRefresh();
+        onFileUploaded(masterFile);
       } catch (error) {
         console.error(error);
-        alert("Parse error — check column headers: NAME, PHONE, Email, leader code, NOP, PREM, UTSAAV, ULIP, CAT1, CAT2");
+        alert(error instanceof Error ? `Master file upload failed: ${error.message}` : "Master file upload failed. Check that the workbook has valid lead columns and the database schema is up to date.");
       }
     };
     reader.readAsBinaryString(file);

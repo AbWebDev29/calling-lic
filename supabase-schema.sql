@@ -83,6 +83,44 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS submanager_name TEXT;
 UPDATE leads SET manager_id = user_id WHERE manager_id IS NULL;
 COMMENT ON COLUMN leads.submanager_name IS 'Submanager assignment imported from the master Excel subManagerName column; matched against profiles.name.';
 
+CREATE TABLE IF NOT EXISTS master_files (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  manager_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  file_name TEXT NOT NULL,
+  row_count INTEGER NOT NULL DEFAULT 0,
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS file_id UUID REFERENCES master_files(id) ON DELETE SET NULL;
+
+CREATE OR REPLACE FUNCTION public.enforce_lead_file_manager()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.file_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.master_files f WHERE f.id = NEW.file_id AND f.manager_id = NEW.manager_id
+  ) THEN
+    RAISE EXCEPTION 'Lead file must belong to the same manager';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS leads_file_manager_check ON leads;
+CREATE TRIGGER leads_file_manager_check
+BEFORE INSERT OR UPDATE OF file_id, manager_id ON leads
+FOR EACH ROW EXECUTE FUNCTION public.enforce_lead_file_manager();
+
+-- Keep preexisting imported leads available under one archived file per manager.
+WITH archived_files AS (
+  INSERT INTO master_files (manager_id, file_name, row_count, uploaded_at)
+  SELECT manager_id, 'Previously uploaded master data', COUNT(*)::INTEGER, COALESCE(MIN(created_at), NOW())
+  FROM leads
+  WHERE manager_id IS NOT NULL AND file_id IS NULL
+  GROUP BY manager_id
+  RETURNING id, manager_id
+)
+UPDATE leads l SET file_id = f.id
+FROM archived_files f
+WHERE l.manager_id = f.manager_id AND l.file_id IS NULL;
+
 -- Link existing master rows to submanager accounts by name, case-insensitively.
 UPDATE leads l
 SET submanager_id = p.id
@@ -93,7 +131,9 @@ WHERE p.role = 'submanager'
   AND l.submanager_id IS NULL;
 
 ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS manager_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS file_id UUID REFERENCES master_files(id) ON DELETE SET NULL;
 UPDATE call_logs c SET manager_id = l.manager_id FROM leads l WHERE c.lead_id = l.id AND c.manager_id IS NULL;
+UPDATE call_logs c SET file_id = l.file_id FROM leads l WHERE c.lead_id = l.id AND c.file_id IS NULL;
 
 CREATE OR REPLACE FUNCTION public.create_manager_profile()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -120,6 +160,33 @@ DROP POLICY IF EXISTS "Managers can update their submanager profiles" ON profile
 CREATE POLICY "Managers can update their submanager profiles" ON profiles FOR UPDATE
 USING (manager_id = auth.uid()) WITH CHECK (manager_id = auth.uid());
 
+ALTER TABLE master_files ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Managers and assigned submanagers view master files" ON master_files;
+CREATE POLICY "Managers and assigned submanagers view master files" ON master_files FOR SELECT
+USING (
+  manager_id = auth.uid()
+  OR EXISTS (
+    SELECT 1 FROM leads l
+    WHERE l.file_id = master_files.id
+      AND (
+        l.submanager_id = auth.uid()
+        OR EXISTS (
+          SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'submanager'
+            AND p.manager_id = l.manager_id
+            AND lower(btrim(p.name)) = lower(btrim(COALESCE(l.submanager_name, '')))
+        )
+      )
+  )
+);
+DROP POLICY IF EXISTS "Managers insert master files" ON master_files;
+CREATE POLICY "Managers insert master files" ON master_files FOR INSERT
+WITH CHECK (manager_id = auth.uid() AND EXISTS (
+  SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'manager'
+));
+DROP POLICY IF EXISTS "Managers delete master files" ON master_files;
+CREATE POLICY "Managers delete master files" ON master_files FOR DELETE
+USING (manager_id = auth.uid());
+
 DROP POLICY IF EXISTS "Users can view their own leads" ON leads;
 DROP POLICY IF EXISTS "Users can insert their own leads" ON leads;
 DROP POLICY IF EXISTS "Users can update their own leads" ON leads;
@@ -141,7 +208,10 @@ USING (
   )
 );
 CREATE POLICY "Managers insert leads" ON leads FOR INSERT
-WITH CHECK (manager_id = auth.uid() AND user_id = auth.uid());
+WITH CHECK (
+  manager_id = auth.uid() AND user_id = auth.uid()
+  AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'manager')
+);
 CREATE POLICY "Managers and assigned submanagers update leads" ON leads FOR UPDATE
 USING (
   manager_id = auth.uid()
@@ -179,6 +249,7 @@ USING (user_id = auth.uid() OR manager_id = auth.uid());
 CREATE POLICY "Caller inserts call logs for assigned leads" ON call_logs FOR INSERT
 WITH CHECK (user_id = auth.uid() AND EXISTS (
   SELECT 1 FROM leads l WHERE l.id = call_logs.lead_id AND l.manager_id = call_logs.manager_id
+    AND l.file_id IS NOT DISTINCT FROM call_logs.file_id
     AND (
       l.submanager_id = auth.uid()
       OR l.manager_id = auth.uid()
@@ -198,6 +269,9 @@ USING (user_id = auth.uid() OR manager_id = auth.uid());
 CREATE INDEX IF NOT EXISTS idx_leads_manager_id ON leads(manager_id);
 CREATE INDEX IF NOT EXISTS idx_leads_submanager_id ON leads(submanager_id);
 CREATE INDEX IF NOT EXISTS idx_call_logs_manager_id ON call_logs(manager_id);
+CREATE INDEX IF NOT EXISTS idx_leads_file_id ON leads(file_id);
+CREATE INDEX IF NOT EXISTS idx_call_logs_file_id ON call_logs(file_id);
+CREATE INDEX IF NOT EXISTS idx_master_files_manager_id ON master_files(manager_id);
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'leads') THEN
@@ -205,5 +279,8 @@ DO $$ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'call_logs') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.call_logs;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'master_files') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.master_files;
   END IF;
 END $$;

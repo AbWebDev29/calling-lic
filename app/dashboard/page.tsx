@@ -19,6 +19,7 @@ interface Lead {
   submanager_name?: string;
   submanager_id?: string | null;
   manager_id?: string;
+  file_id?: string | null;
   company?: string;
   leader_code?: string;
   nop?: number;
@@ -42,19 +43,29 @@ interface CallLog {
   called_at: string;
   manager_id?: string;
   user_id?: string;
+  file_id?: string | null;
+}
+
+interface MasterFile {
+  id: string;
+  manager_id: string;
+  file_name: string;
+  row_count: number;
+  uploaded_at: string;
 }
 
 const PAGE_SIZE = 1000;
 
-async function fetchAllLeads(userId: string, role = "manager", ownerManagerId = userId): Promise<Lead[]> {
+async function fetchAllLeads(userId: string, role = "manager", ownerManagerId = userId, fileId: string | null = null): Promise<Lead[]> {
   const allLeads: Lead[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await supabase
+    const leadsQuery = supabase
       .from("leads")
       .select("*")
       // RLS returns only the signed-in submanager's assigned rows. Filtering by
       // manager keeps the query scoped while allowing name-based legacy matches.
-      .eq("manager_id", role === "manager" ? userId : ownerManagerId)
+      .eq("manager_id", role === "manager" ? userId : ownerManagerId);
+    const { data, error } = await (fileId ? leadsQuery.eq("file_id", fileId) : leadsQuery)
       .order("created_at", { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
@@ -64,13 +75,14 @@ async function fetchAllLeads(userId: string, role = "manager", ownerManagerId = 
   }
 }
 
-async function fetchAllCallLogs(userId: string, role = "manager"): Promise<CallLog[]> {
+async function fetchAllCallLogs(userId: string, role = "manager", fileId: string | null = null): Promise<CallLog[]> {
   const allLogs: CallLog[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await supabase
+    const logsQuery = supabase
       .from("call_logs")
       .select("*")
-      .eq(role === "manager" ? "manager_id" : "user_id", userId)
+      .eq(role === "manager" ? "manager_id" : "user_id", userId);
+    const { data, error } = await (fileId ? logsQuery.eq("file_id", fileId) : logsQuery)
       .order("called_at", { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
@@ -92,12 +104,27 @@ export default function Dashboard() {
   const [role, setRole] = useState("manager");
   const [managerId, setManagerId] = useState("");
   const [submanagers, setSubmanagers] = useState<{id:string; name:string; email:string}[]>([]);
+  const [masterFiles, setMasterFiles] = useState<MasterFile[]>([]);
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [callPeriod, setCallPeriod] = useState<"all" | "day" | "week">("all");
   const [peopleMessage, setPeopleMessage] = useState("");
   const [peopleBusy, setPeopleBusy] = useState(false);
   const [dashboardError, setDashboardError] = useState("");
   const dialerOpenedRef = useRef(false);
   const dialerOpenedAtRef = useRef(0);
   const router = useRouter();
+  const selectedMasterFile = masterFiles.find(file => file.id === selectedFileId) || null;
+  const visibleCallLogs = logs.filter(log => {
+    if (log.disposition === "Pending") return false;
+    if (callPeriod === "all") return true;
+    const calledAt = new Date(log.called_at);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (callPeriod === "day") return calledAt >= today;
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    return calledAt >= weekStart;
+  });
 
   useEffect(() => {
     const handleReturnToPage = () => {
@@ -121,18 +148,21 @@ export default function Dashboard() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) return;
       const [allLeads, allLogs] = await Promise.all([
-        fetchAllLeads(role === "manager" ? managerId : userData.user.id, role, managerId),
-        fetchAllCallLogs(role === "manager" ? managerId : userData.user.id, role),
+        fetchAllLeads(role === "manager" ? managerId : userData.user.id, role, managerId, selectedFileId),
+        fetchAllCallLogs(role === "manager" ? managerId : userData.user.id, role, selectedFileId),
       ]);
+      const { data: updatedFiles } = await supabase.from("master_files").select("*").order("uploaded_at", { ascending: false });
+      setMasterFiles((updatedFiles || []) as unknown as MasterFile[]);
       setLeads(allLeads);
       setLogs(allLogs);
     };
     const channel = supabase.channel(`workspace-${managerId}-${role}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "call_logs" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "master_files" }, refresh)
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [managerId, role]);
+  }, [managerId, role, selectedFileId]);
 
   // Fetch leads and logs
   useEffect(() => {
@@ -152,9 +182,15 @@ export default function Dashboard() {
         setRole(userRole); setManagerId(ownerId);
         const { data: people } = await supabase.from("profiles").select("id, name, email").eq("manager_id", ownerId).eq("role", "submanager");
         setSubmanagers((people || []) as {id:string; name:string; email:string}[]);
+        const { data: filesData, error: filesError } = await supabase.from("master_files").select("*").order("uploaded_at", { ascending: false });
+        if (filesError) throw filesError;
+        const availableFiles = (filesData || []) as unknown as MasterFile[];
+        setMasterFiles(availableFiles);
+        const activeFileId = availableFiles[0]?.id || null;
+        setSelectedFileId(activeFileId);
         const [allLeads, allLogs] = await Promise.all([
-          fetchAllLeads(userRole === "manager" ? ownerId : userData.user.id, userRole, ownerId),
-          fetchAllCallLogs(userRole === "manager" ? ownerId : userData.user.id, userRole),
+          fetchAllLeads(userRole === "manager" ? ownerId : userData.user.id, userRole, ownerId, activeFileId),
+          fetchAllCallLogs(userRole === "manager" ? ownerId : userData.user.id, userRole, activeFileId),
         ]);
         setLeads(allLeads);
         setLogs(allLogs);
@@ -203,6 +239,7 @@ export default function Dashboard() {
           notes: "",
           user_id: userData.user.id,
           manager_id: managerId,
+          file_id: lead.file_id || null,
         } as never)
         .select()
         .single();
@@ -252,8 +289,8 @@ export default function Dashboard() {
       const { data: userData } = await supabase.auth.getUser();
       if (userData.user) {
         const [allLeads, allLogs] = await Promise.all([
-          fetchAllLeads(role === "manager" ? managerId : userData.user.id, role, managerId),
-          fetchAllCallLogs(role === "manager" ? managerId : userData.user.id, role),
+          fetchAllLeads(role === "manager" ? managerId : userData.user.id, role, managerId, selectedFileId),
+          fetchAllCallLogs(role === "manager" ? managerId : userData.user.id, role, selectedFileId),
         ]);
         setLeads(allLeads);
         setLogs(allLogs);
@@ -267,6 +304,47 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error saving log:", error);
       alert("Failed to save call log");
+    }
+  };
+
+  const selectMasterFile = async (fileId: string) => {
+    setSelectedFileId(fileId || null);
+    setLoading(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return;
+      const [allLeads, allLogs] = await Promise.all([
+        fetchAllLeads(role === "manager" ? managerId : userData.user.id, role, managerId, fileId || null),
+        fetchAllCallLogs(role === "manager" ? managerId : userData.user.id, role, fileId || null),
+      ]);
+      setLeads(allLeads);
+      setLogs(allLogs);
+      setCallPeriod("all");
+    } catch (error) {
+      setDashboardError(error instanceof Error ? error.message : "Could not load this file.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMasterFileUploaded = async (file: MasterFile) => {
+    setMasterFiles(current => [file, ...current.filter(existing => existing.id !== file.id)]);
+    setSelectedFileId(file.id);
+    setLoading(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return;
+      const [allLeads, allLogs] = await Promise.all([
+        fetchAllLeads(managerId, "manager", managerId, file.id),
+        fetchAllCallLogs(managerId, "manager", file.id),
+      ]);
+      setLeads(allLeads);
+      setLogs(allLogs);
+      setCallPeriod("all");
+    } catch (error) {
+      setDashboardError(error instanceof Error ? error.message : "Could not load the uploaded file.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -287,7 +365,7 @@ export default function Dashboard() {
   };
 
   const exportCSV = () => {
-    const active = logs.filter(l => l.disposition !== "Pending");
+    const active = visibleCallLogs;
     const submanagerHeader = role === "manager";
     const csv = [
       ["#", "Lead Name", ...(submanagerHeader ? ["Submanager"] : []), "Company", "Phone", "Disposition", "Notes", "Date & Time"].join(","),
@@ -298,7 +376,8 @@ export default function Dashboard() {
 
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `call_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    const fileLabel = (selectedMasterFile?.file_name || "all_files").replace(/[^a-z0-9-_]+/gi, "_");
+    a.download = `call_report_${fileLabel}_${callPeriod}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -314,6 +393,7 @@ export default function Dashboard() {
     { id: "analytics", label: "Analytics", badge: null, icon: ChartNoAxesCombined },
     ...(role === "manager" ? [{ id: "people", label: "People and Access", badge: null, icon: UserRoundCog }] : []),
   ];
+  const selectedFileIndex = masterFiles.findIndex(file => file.id === selectedFileId);
 
   if (loading) {
     return (
@@ -393,6 +473,19 @@ export default function Dashboard() {
         {/* Content */}
         <div className="dashboard-content max-w-6xl mx-auto px-7 py-7">
           {dashboardError && <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">Could not load your workspace: {dashboardError}. Check that the latest `supabase-schema.sql` has been applied.</div>}
+          {tab !== "people" && (
+            <section className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+              <label htmlFor="master-file-select" className="text-sm font-bold text-slate-700">Master file</label>
+              {masterFiles.length > 0 ? <>
+                <button type="button" disabled={selectedFileIndex < 0 || selectedFileIndex >= masterFiles.length - 1} onClick={() => selectMasterFile(masterFiles[selectedFileIndex + 1]?.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-40">← Previous file</button>
+                <select id="master-file-select" value={selectedFileId || ""} onChange={event => selectMasterFile(event.target.value)} className="min-w-64 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium">
+                  {masterFiles.map(file => <option key={file.id} value={file.id}>{file.file_name} · {new Date(file.uploaded_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}</option>)}
+                </select>
+                <button type="button" disabled={selectedFileIndex <= 0} onClick={() => selectMasterFile(masterFiles[selectedFileIndex - 1]?.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-40">Next file →</button>
+                {role === "manager" && selectedMasterFile && <span className="text-xs text-slate-500">{selectedMasterFile.row_count.toLocaleString("en-IN")} rows in file</span>}
+              </> : <span className="text-sm text-slate-500">{role === "manager" ? "Upload a master Excel file to create a file history." : "No master files have leads assigned to you yet."}</span>}
+            </section>
+          )}
           {tab === "leads" && (
             <>
               <div className="dashboard-page-intro">
@@ -408,12 +501,14 @@ export default function Dashboard() {
                 logs={logs}
                 onRefresh={() => {
                   supabase.auth.getUser().then(({ data }) => {
-                    if (data.user) fetchAllLeads(role === "manager" ? managerId : data.user.id, role, managerId).then(setLeads).catch(error => console.error("Error refreshing leads:", error));
+                    if (data.user) fetchAllLeads(role === "manager" ? managerId : data.user.id, role, managerId, selectedFileId).then(setLeads).catch(error => console.error("Error refreshing leads:", error));
                   });
                 }}
                 onCall={handleCall}
                 canManage={role === "manager"}
                 submanagers={submanagers}
+                fileId={selectedFileId}
+                onFileUploaded={handleMasterFileUploaded}
               />
             </>
           )}
@@ -434,6 +529,15 @@ export default function Dashboard() {
                 </button>
               </div>
 
+              <div className="mb-4 flex flex-wrap items-center gap-2" aria-label="Call history date range">
+                {[{ id: "day", label: "Today" }, { id: "week", label: "This week" }, { id: "all", label: "All dates" }].map(period => (
+                  <button key={period.id} type="button" onClick={() => setCallPeriod(period.id as "day" | "week" | "all")} aria-pressed={callPeriod === period.id} className={`rounded-lg border px-3 py-2 text-xs font-bold ${callPeriod === period.id ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-600"}`}>
+                    {period.label}
+                  </button>
+                ))}
+                <span className="ml-auto text-xs text-slate-500">{selectedMasterFile?.file_name || "All files"} · {visibleCallLogs.length} calls</span>
+              </div>
+
               <div className="table-scroll bg-white border border-slate-200 rounded-2xl overflow-hidden">
                 <table className="w-full border-collapse text-xs">
                   <thead>
@@ -449,7 +553,7 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {logs.filter(l => l.disposition !== "Pending").length === 0 ? (
+                    {visibleCallLogs.length === 0 ? (
                       <tr>
                         <td colSpan={role === "manager" ? 7 : 6} className="text-center py-12 text-slate-400">
                           <div className="text-4xl mb-2">📋</div>
@@ -457,12 +561,11 @@ export default function Dashboard() {
                         </td>
                       </tr>
                     ) : (
-                      logs
-                        .filter(l => l.disposition !== "Pending")
+                      visibleCallLogs
                         .map((log, i) => (
                           <tr
                             key={log.id}
-                            className={`${i < logs.filter(l => l.disposition !== "Pending").length - 1 ? "border-b border-slate-100" : ""}`}
+                            className={`${i < visibleCallLogs.length - 1 ? "border-b border-slate-100" : ""}`}
                           >
                             <td className="px-4 py-3.5 font-bold text-slate-900">{log.lead_name}</td>
                             {role === "manager" && <td className="px-4 py-3.5 text-slate-600">{leads.find(lead => lead.id === log.lead_id)?.submanager_name || "—"}</td>}
