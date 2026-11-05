@@ -6,7 +6,7 @@ import { LEAD_STATUSES } from "@/lib/leadStatus";
 interface Lead {
   id: number;
   name: string;
-  phone: string;
+  mobile: string;
   company?: string;
 }
 
@@ -73,7 +73,7 @@ export default function CallModal({ lead, isOpen, callReturnedFromDialer, onClos
         {/* Call initiated message */}
         <div className={`rounded-xl p-3 mb-5.5 text-xs ${callReturnedFromDialer ? "bg-indigo-50 border border-indigo-200 text-indigo-800" : "bg-slate-50 border border-slate-200 text-slate-700"}`}>
           <strong>{callReturnedFromDialer ? "Welcome back" : "Your phone dialer is opening"}</strong>
-          <div className="mt-1">Call to <strong className="font-mono">{formatPhone(lead.phone)}</strong></div>
+          <div className="mt-1">Call to <strong className="font-mono">{formatPhone(lead.mobile)}</strong></div>
           <div className="text-2xs mt-1 opacity-80">Choose the outcome below to save this call and update the lead.</div>
         </div>
 

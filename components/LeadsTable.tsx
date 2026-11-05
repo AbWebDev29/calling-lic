@@ -9,17 +9,17 @@ import * as XLSX from "xlsx";
 
 interface Lead {
   id: number;
+  agent_code: string;
   name: string;
-  phone: string;
-  email: string;
+  mobile: string;
   submanager_name?: string;
   submanager_id?: string | null;
   company?: string;
   leader_code?: string;
-  nop?: number;
-  prem?: number;
-  utsaav?: number;
-  ulip?: number;
+  data1?: string;
+  data2?: string;
+  data3?: string;
+  data4?: string;
   cat1?: string;
   cat2?: number;
   status: string;
@@ -71,8 +71,8 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
   const [manualError, setManualError] = useState("");
   const [manualSuccess, setManualSuccess] = useState("");
   const [manualLead, setManualLead] = useState({
-    name: "", phone: "", email: "", leader_code: "", nop: "", prem: "",
-    utsaav: "", ulip: "", cat1: "", cat2: "", status: "Not Picked",
+    agent_code: "", name: "", mobile: "", leader_code: "", data1: "", data2: "", data3: "", data4: "",
+    cat1: "", cat2: "", status: "Not Picked",
   });
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -106,13 +106,13 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
         manager_id: userData.user.id,
         file_id: fileId,
         name: manualLead.name.trim(),
-        phone: manualLead.phone.trim() || null,
-        email: manualLead.email.trim() || null,
+        agent_code: manualLead.agent_code.trim() || null,
+        mobile: manualLead.mobile.trim() || null,
         leader_code: manualLead.leader_code.trim() || null,
-        nop: manualLead.nop ? Number(manualLead.nop) : null,
-        prem: manualLead.prem ? Number(manualLead.prem) : null,
-        utsaav: manualLead.utsaav ? Number(manualLead.utsaav) : null,
-        ulip: manualLead.ulip ? Number(manualLead.ulip) : null,
+        data1: manualLead.data1.trim() || null,
+        data2: manualLead.data2.trim() || null,
+        data3: manualLead.data3.trim() || null,
+        data4: manualLead.data4.trim() || null,
         cat1: manualLead.cat1.trim() || null,
         cat2: manualLead.cat2 ? Number(manualLead.cat2) : null,
         status: manualLead.status,
@@ -120,7 +120,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
       } as never);
 
       if (error) throw error;
-      setManualLead({ name: "", phone: "", email: "", leader_code: "", nop: "", prem: "", utsaav: "", ulip: "", cat1: "", cat2: "", status: "Not Picked" });
+      setManualLead({ agent_code: "", name: "", mobile: "", leader_code: "", data1: "", data2: "", data3: "", data4: "", cat1: "", cat2: "", status: "Not Picked" });
       setShowManualForm(false);
       setSearch("");
       setStatusFilter("All");
@@ -141,9 +141,9 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
     .filter(l => {
       const matchSearch = !search ||
         l.name.toLowerCase().includes(search.toLowerCase()) ||
-        (l.company && l.company.toLowerCase().includes(search.toLowerCase())) ||
+        (l.agent_code && l.agent_code.toLowerCase().includes(search.toLowerCase())) ||
         (l.leader_code && l.leader_code.toLowerCase().includes(search.toLowerCase())) ||
-        l.phone.includes(search);
+        l.mobile.includes(search);
       const matchStatus = statusFilter === "All" || normalizeLeadStatus(l.status) === statusFilter;
       
       const matchFilters = filters.every(f => {
@@ -183,27 +183,32 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
           return;
         }
 
-        const assignmentFor = (row: Record<string, any>) => {
-          const key = Object.keys(row).find(column => column.toLowerCase().replace(/[ _]/g, "") === "submanagername");
-          return key ? String(row[key] || "").trim() : "";
+        const rows = data as Record<string, unknown>[];
+        const normalizeHeader = (header: string) => header.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const rowValue = (row: Record<string, unknown>, header: string) => {
+          const actualHeader = Object.keys(row).find(key => normalizeHeader(key) === normalizeHeader(header));
+          const value = actualHeader ? row[actualHeader] : "";
+          return value === null || value === undefined ? "" : String(value).trim();
         };
-        const leads = (data as Record<string, any>[]).map((r: any) => ({
-          name: r.NAME || r.Name || r.name || r["Full Name"] || "Unknown",
-          phone: String(r.PHONE || r.Phone || r.phone || r["Phone Number"] || ""),
-          email: r.email || r.Email || r.EMAIL || "",
-          submanager_name: assignmentFor(r),
-          leader_code: r["leader code"] || r.leader_code || r.LEADER_CODE || "",
-          nop: r.NOP || r.nop || 0,
-          prem: r.PREM || r.prem || 0,
-          utsaav: r.UTSAAV || r.utsaav || 0,
-          ulip: r.ULIP || r.ulip || 0,
-          cat1: r.CAT1 || r.cat1 || "",
-          cat2: r.CAT2 || r.cat2 || 0,
+        const requiredHeaders = ["agentCode", "name", "mobile", "submanagerName", "leaderCode", "data1", "data2", "data3", "data4"];
+        const missingHeaders = requiredHeaders.filter(header => !Object.keys(rows[0] || {}).some(key => normalizeHeader(key) === normalizeHeader(header)));
+        if (missingHeaders.length) throw new Error(`Missing required columns: ${missingHeaders.join(", ")}.`);
+        const assignmentFor = (row: Record<string, unknown>) => rowValue(row, "submanagerName");
+        const leads = rows.map(row => ({
+          agent_code: rowValue(row, "agentCode"),
+          name: rowValue(row, "name"),
+          mobile: rowValue(row, "mobile"),
+          submanager_name: assignmentFor(row),
+          leader_code: rowValue(row, "leaderCode"),
+          data1: rowValue(row, "data1"),
+          data2: rowValue(row, "data2"),
+          data3: rowValue(row, "data3"),
+          data4: rowValue(row, "data4"),
           status: "Not Picked",
           source: "Excel",
           user_id: userData.user.id,
           manager_id: userData.user.id,
-          submanager_id: submanagers.find(person => person.name.trim().toLowerCase() === assignmentFor(r).toLowerCase())?.id || null,
+          submanager_id: submanagers.find(person => person.name.trim().toLowerCase() === assignmentFor(row).toLowerCase())?.id || null,
         }));
 
         const { data: masterFileData, error: fileError } = await supabase.from("master_files").insert({
@@ -224,9 +229,8 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
           await supabase.from("master_files").delete().eq("id", masterFile.id);
           throw error;
         }
-        const unmatched = (data as Record<string, any>[]).filter(row => {
-          const key = Object.keys(row).find(column => column.toLowerCase().replace(/[ _]/g, "") === "submanagername");
-          const value = key ? row[key] : "";
+        const unmatched = rows.filter(row => {
+          const value = assignmentFor(row);
           return value && !submanagers.some(person => person.name.trim().toLowerCase() === String(value).trim().toLowerCase());
         });
         if (unmatched.length) alert(`${unmatched.length} row(s) were uploaded without an assignment because subManagerName did not match a People and Access name.`);
@@ -303,11 +307,11 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
                 </label>
                 <label className="manual-field">
                   <span>Phone number</span>
-                  <input type="tel" maxLength={30} value={manualLead.phone} onChange={e => updateManualLead("phone", e.target.value)} placeholder="+91 98765 43210" />
+                  <input type="tel" maxLength={30} value={manualLead.mobile} onChange={e => updateManualLead("mobile", e.target.value)} placeholder="+91 98765 43210" />
                 </label>
                 <label className="manual-field">
-                  <span>Email address</span>
-                  <input type="email" maxLength={254} value={manualLead.email} onChange={e => updateManualLead("email", e.target.value)} placeholder="name@example.com" />
+                  <span>Agent code</span>
+                  <input maxLength={80} value={manualLead.agent_code} onChange={e => updateManualLead("agent_code", e.target.value)} placeholder="Alphanumeric" />
                 </label>
                 <label className="manual-field">
                   <span>Leader code</span>
@@ -321,11 +325,11 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
                 </label>
                 <div className="manual-field-divider">Tracking data <span>Optional</span></div>
                 {([
-                  ["nop", "NOP"], ["prem", "PREM"], ["utsaav", "UTSAAV"], ["ulip", "ULIP"], ["cat2", "CAT2"],
+                  ["data1", "Data 1"], ["data2", "Data 2"], ["data3", "Data 3"], ["data4", "Data 4"], ["cat2", "CAT2"],
                 ] as const).map(([field, label]) => (
                   <label className="manual-field" key={field}>
                     <span>{label}</span>
-                    <input type="number" min="0" step="any" value={manualLead[field]} onChange={e => updateManualLead(field, e.target.value)} placeholder="—" />
+                    <input maxLength={120} value={manualLead[field]} onChange={e => updateManualLead(field, e.target.value)} placeholder="—" />
                   </label>
                 ))}
                 <label className="manual-field">
@@ -349,7 +353,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, company, phone…"
+            placeholder="Search by name, agent code, mobile…"
             className="w-full pl-10 pr-4 py-2.5 border-1.5 border-slate-200 rounded-lg font-base bg-white outline-none"
           />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base text-slate-400">🔍</span>
@@ -426,13 +430,13 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
                     className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 outline-none bg-slate-50 flex-1 cursor-pointer"
                   >
                     <option value="name">Name</option>
-                    <option value="phone">Phone</option>
-                    <option value="email">Email</option>
+                    <option value="agent_code">Agent code</option>
+                    <option value="mobile">Mobile</option>
                     <option value="leader_code">Leader Code</option>
-                    <option value="nop">NOP</option>
-                    <option value="prem">PREM</option>
-                    <option value="utsaav">UTSAAV</option>
-                    <option value="ulip">ULIP</option>
+                    <option value="data1">Data 1</option>
+                    <option value="data2">Data 2</option>
+                    <option value="data3">Data 3</option>
+                    <option value="data4">Data 4</option>
                     <option value="cat1">CAT1</option>
                     <option value="cat2">CAT2</option>
                     <option value="status">Status</option>
@@ -479,7 +483,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              {(canManage ? ["Lead", "Submanager", "Phone", "L.Code", "NOP", "PREM", "UTSAAV", "ULIP", "Latest call", "Previous call", "Action"] : ["Lead", "Phone", "L.Code", "NOP", "PREM", "UTSAAV", "ULIP", "Latest call", "Previous call", "Action"]).map(h => (
+              {["Agent code", "Lead", "Submanager", "Mobile", "Leader code", "Data 1", "Data 2", "Data 3", "Data 4", "CAT1", "CAT2", "Status", "Latest call", "Previous call", "Action"].map(h => (
                 <th
                   key={h}
                   className="px-2 py-3 text-left font-bold text-slate-600 text-2xs uppercase tracking-wider"
@@ -496,6 +500,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
                   key={lead.id}
                   className={`${i < visible.length - 1 ? "border-b border-slate-100" : ""} hover:bg-slate-50 transition-colors`}
                 >
+                  <td data-label="Agent code" className="px-2 py-3.5 text-slate-600 font-medium">{lead.agent_code || "—"}</td>
                   <td data-label="Lead" className="px-2 py-3.5 lead-card-title">
                     <div className="flex items-center gap-2.5">
                       <div
@@ -506,19 +511,21 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
                       </div>
                       <div className="min-w-0 max-w-32">
                         <div className="font-bold text-slate-900 truncate">{lead.name}</div>
-                        <div className="text-2xs text-slate-400 truncate">{lead.email}</div>
                       </div>
                     </div>
                   </td>
-                  {canManage && <td data-label="Submanager" className="px-2 py-3.5 text-slate-600 font-medium">{lead.submanager_name || "—"}</td>}
-                  <td data-label="Phone" className="px-2 py-3.5">
-                    <span className="font-mono text-2xs text-slate-900 whitespace-nowrap">{formatPhone(lead.phone)}</span>
+                  <td data-label="Submanager" className="px-2 py-3.5 text-slate-600 font-medium">{lead.submanager_name || "—"}</td>
+                  <td data-label="Mobile" className="px-2 py-3.5">
+                    <span className="font-mono text-2xs text-slate-900 whitespace-nowrap">{formatPhone(lead.mobile)}</span>
                   </td>
-                  <td data-label="Leader code" className="px-2 py-3.5 text-slate-600 font-medium">{lead.leader_code || "-"}</td>
-                  <td data-label="NOP" className="px-2 py-3.5 text-slate-600 font-medium">{lead.nop || "-"}</td>
-                  <td data-label="PREM" className="px-2 py-3.5 text-slate-600 font-medium">{lead.prem || "-"}</td>
-                  <td data-label="UTSAAV" className="px-2 py-3.5 text-slate-600 font-medium">{lead.utsaav || "-"}</td>
-                  <td data-label="ULIP" className="px-2 py-3.5 text-slate-600 font-medium">{lead.ulip || "-"}</td>
+                  <td data-label="Leader code" className="px-2 py-3.5 text-slate-600 font-medium">{lead.leader_code || "—"}</td>
+                  <td data-label="Data 1" className="px-2 py-3.5 text-slate-600 font-medium">{lead.data1 || "—"}</td>
+                  <td data-label="Data 2" className="px-2 py-3.5 text-slate-600 font-medium">{lead.data2 || "—"}</td>
+                  <td data-label="Data 3" className="px-2 py-3.5 text-slate-600 font-medium">{lead.data3 || "—"}</td>
+                  <td data-label="Data 4" className="px-2 py-3.5 text-slate-600 font-medium">{lead.data4 || "—"}</td>
+                  <td data-label="CAT1" className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat1 || "—"}</td>
+                  <td data-label="CAT2" className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat2 ?? "—"}</td>
+                  <td data-label="Status" className="px-2 py-3.5 text-slate-600 font-medium">{normalizeLeadStatus(lead.status)}</td>
                   <td data-label="Latest call" className="px-2 py-3.5">{renderCallEntry(latestCallsByLead.get(lead.id)?.[0])}</td>
                   <td data-label="Previous call" className="px-2 py-3.5">{renderCallEntry(latestCallsByLead.get(lead.id)?.[1])}</td>
                   <td data-label="Action" className="px-2 py-3.5 lead-card-action">

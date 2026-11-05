@@ -13,19 +13,19 @@ import Analytics from "@/components/Analytics";
 
 interface Lead {
   id: number;
+  agent_code: string;
   name: string;
-  phone: string;
-  email: string;
+  mobile: string;
   submanager_name?: string;
   submanager_id?: string | null;
   manager_id?: string;
   file_id?: string | null;
   company?: string;
   leader_code?: string;
-  nop?: number;
-  prem?: number;
-  utsaav?: number;
-  ulip?: number;
+  data1?: string;
+  data2?: string;
+  data3?: string;
+  data4?: string;
   cat1?: string;
   cat2?: number;
   status: string;
@@ -215,7 +215,7 @@ export default function Dashboard() {
   }, [router]);
 
   const handleCall = async (lead: Lead) => {
-    if (!lead.phone?.trim()) {
+    if (!lead.mobile?.trim()) {
       alert("This lead does not have a phone number yet.");
       return;
     }
@@ -234,7 +234,7 @@ export default function Dashboard() {
           lead_id: lead.id,
           lead_name: lead.name,
           company: lead.company || "",
-          phone: lead.phone,
+          phone: lead.mobile,
           disposition: "Pending",
           notes: "",
           user_id: userData.user.id,
@@ -256,7 +256,7 @@ export default function Dashboard() {
       // Open the native dialer only after the pending call record exists.
       dialerOpenedRef.current = true;
       dialerOpenedAtRef.current = Date.now();
-      const dialNumber = lead.phone.replace(/[^\d+*#,;]/g, "");
+      const dialNumber = lead.mobile.replace(/[^\d+*#,;]/g, "");
       window.location.href = `tel:${dialNumber}`;
     } catch (error) {
       console.error("Error starting call:", error);

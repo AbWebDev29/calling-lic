@@ -6,13 +6,13 @@ CREATE TABLE IF NOT EXISTS leads (
   id           BIGSERIAL PRIMARY KEY,
   user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name         TEXT NOT NULL,
-  phone        TEXT,
-  email        TEXT,
+  agent_code   TEXT,
+  mobile       TEXT,
   leader_code  TEXT,
-  nop          NUMERIC,
-  prem         NUMERIC,
-  utsaav       NUMERIC,
-  ulip         NUMERIC,
+  data1        TEXT,
+  data2        TEXT,
+  data3        TEXT,
+  data4        TEXT,
   cat1         TEXT,
   cat2         NUMERIC,
   status       TEXT DEFAULT 'Not Picked',
@@ -80,6 +80,41 @@ CREATE TABLE IF NOT EXISTS profiles (
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS manager_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS submanager_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS submanager_name TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS agent_code TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS mobile TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data1 TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data2 TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data3 TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS data4 TEXT;
+
+-- Migrate prior lead field names without losing their values, then remove the old columns.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'email') THEN
+    EXECUTE 'UPDATE public.leads SET agent_code = COALESCE(NULLIF(agent_code, ''''), email)';
+    ALTER TABLE public.leads DROP COLUMN email;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'phone') THEN
+    EXECUTE 'UPDATE public.leads SET mobile = COALESCE(NULLIF(mobile, ''''), phone)';
+    ALTER TABLE public.leads DROP COLUMN phone;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'nop') THEN
+    EXECUTE 'UPDATE public.leads SET data1 = COALESCE(data1, nop::text)';
+    ALTER TABLE public.leads DROP COLUMN nop;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'prem') THEN
+    EXECUTE 'UPDATE public.leads SET data2 = COALESCE(data2, prem::text)';
+    ALTER TABLE public.leads DROP COLUMN prem;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'utsaav') THEN
+    EXECUTE 'UPDATE public.leads SET data3 = COALESCE(data3, utsaav::text)';
+    ALTER TABLE public.leads DROP COLUMN utsaav;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'ulip') THEN
+    EXECUTE 'UPDATE public.leads SET data4 = COALESCE(data4, ulip::text)';
+    ALTER TABLE public.leads DROP COLUMN ulip;
+  END IF;
+END $$;
 UPDATE leads SET manager_id = user_id WHERE manager_id IS NULL;
 COMMENT ON COLUMN leads.submanager_name IS 'Submanager assignment imported from the master Excel subManagerName column; matched against profiles.name.';
 
