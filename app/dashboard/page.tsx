@@ -26,8 +26,6 @@ interface Lead {
   data2?: string;
   data3?: string;
   data4?: string;
-  cat1?: string;
-  cat2?: number;
   status: string;
   source: string;
 }

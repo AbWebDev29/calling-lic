@@ -13,8 +13,6 @@ CREATE TABLE IF NOT EXISTS leads (
   data2        TEXT,
   data3        TEXT,
   data4        TEXT,
-  cat1         TEXT,
-  cat2         NUMERIC,
   status       TEXT DEFAULT 'Not Picked',
   source       TEXT DEFAULT 'Manual',
   created_at   TIMESTAMPTZ DEFAULT NOW(),
@@ -113,6 +111,12 @@ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'ulip') THEN
     EXECUTE 'UPDATE public.leads SET data4 = COALESCE(data4, ulip::text)';
     ALTER TABLE public.leads DROP COLUMN ulip;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'cat1') THEN
+    ALTER TABLE public.leads DROP COLUMN cat1;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'cat2') THEN
+    ALTER TABLE public.leads DROP COLUMN cat2;
   END IF;
 END $$;
 UPDATE leads SET manager_id = user_id WHERE manager_id IS NULL;

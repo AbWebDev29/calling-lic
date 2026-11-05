@@ -20,8 +20,6 @@ interface Lead {
   data2?: string;
   data3?: string;
   data4?: string;
-  cat1?: string;
-  cat2?: number;
   status: string;
   source: string;
 }
@@ -72,7 +70,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
   const [manualSuccess, setManualSuccess] = useState("");
   const [manualLead, setManualLead] = useState({
     agent_code: "", name: "", mobile: "", leader_code: "", data1: "", data2: "", data3: "", data4: "",
-    cat1: "", cat2: "", status: "Not Picked",
+    status: "Not Picked",
   });
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -113,14 +111,12 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
         data2: manualLead.data2.trim() || null,
         data3: manualLead.data3.trim() || null,
         data4: manualLead.data4.trim() || null,
-        cat1: manualLead.cat1.trim() || null,
-        cat2: manualLead.cat2 ? Number(manualLead.cat2) : null,
         status: manualLead.status,
         source: "Manual",
       } as never);
 
       if (error) throw error;
-      setManualLead({ agent_code: "", name: "", mobile: "", leader_code: "", data1: "", data2: "", data3: "", data4: "", cat1: "", cat2: "", status: "Not Picked" });
+      setManualLead({ agent_code: "", name: "", mobile: "", leader_code: "", data1: "", data2: "", data3: "", data4: "", status: "Not Picked" });
       setShowManualForm(false);
       setSearch("");
       setStatusFilter("All");
@@ -325,17 +321,13 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
                 </label>
                 <div className="manual-field-divider">Tracking data <span>Optional</span></div>
                 {([
-                  ["data1", "Data 1"], ["data2", "Data 2"], ["data3", "Data 3"], ["data4", "Data 4"], ["cat2", "CAT2"],
+                  ["data1", "Data 1"], ["data2", "Data 2"], ["data3", "Data 3"], ["data4", "Data 4"],
                 ] as const).map(([field, label]) => (
                   <label className="manual-field" key={field}>
                     <span>{label}</span>
                     <input maxLength={120} value={manualLead[field]} onChange={e => updateManualLead(field, e.target.value)} placeholder="—" />
                   </label>
                 ))}
-                <label className="manual-field">
-                  <span>CAT1</span>
-                  <input maxLength={80} value={manualLead.cat1} onChange={e => updateManualLead("cat1", e.target.value)} placeholder="Optional" />
-                </label>
               </div>
               {manualError && <div className="manual-error" role="alert">{manualError}</div>}
               <div className="manual-modal-actions">
@@ -437,8 +429,6 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
                     <option value="data2">Data 2</option>
                     <option value="data3">Data 3</option>
                     <option value="data4">Data 4</option>
-                    <option value="cat1">CAT1</option>
-                    <option value="cat2">CAT2</option>
                     <option value="status">Status</option>
                     <option value="source">Source</option>
                   </select>
@@ -483,7 +473,7 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              {["Agent code", "Lead", ...(canManage ? ["Submanager"] : []), "Mobile", "Leader code", "Data 1", "Data 2", "Data 3", "Data 4", "CAT1", "CAT2", "Status", "Latest call", "Previous call", "Action"].map(h => (
+              {["Agent code", "Lead", ...(canManage ? ["Submanager"] : []), "Mobile", "Leader code", "Data 1", "Data 2", "Data 3", "Data 4", "Status", "Latest call", "Previous call", "Action"].map(h => (
                 <th
                   key={h}
                   className="px-2 py-3 text-left font-bold text-slate-600 text-2xs uppercase tracking-wider"
@@ -523,8 +513,6 @@ export default function LeadsTable({ leads, logs, onRefresh, onCall, canManage =
                   <td data-label="Data 2" className="px-2 py-3.5 text-slate-600 font-medium">{lead.data2 || "—"}</td>
                   <td data-label="Data 3" className="px-2 py-3.5 text-slate-600 font-medium">{lead.data3 || "—"}</td>
                   <td data-label="Data 4" className="px-2 py-3.5 text-slate-600 font-medium">{lead.data4 || "—"}</td>
-                  <td data-label="CAT1" className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat1 || "—"}</td>
-                  <td data-label="CAT2" className="px-2 py-3.5 text-slate-600 font-medium">{lead.cat2 ?? "—"}</td>
                   <td data-label="Status" className="px-2 py-3.5 text-slate-600 font-medium">{normalizeLeadStatus(lead.status)}</td>
                   <td data-label="Latest call" className="px-2 py-3.5">{renderCallEntry(latestCallsByLead.get(lead.id)?.[0])}</td>
                   <td data-label="Previous call" className="px-2 py-3.5">{renderCallEntry(latestCallsByLead.get(lead.id)?.[1])}</td>
